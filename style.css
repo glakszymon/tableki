@@ -1,18 +1,68 @@
-.input-text, .input-select, .input-color {
-  background-color: #1f1f1f;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 6px 10px;
+html, body {
+  height: 100%;
+  margin: 0;
+  touch-action: manipulation;
+}
+
+.app-container {
+  display: grid;
+  grid-template-rows: 48% 52%;
+  height: 100%;
   width: 100%;
+}
+
+.controls {
+  overflow-y: auto;
+  background: #0d0d0d;
+  border-bottom: 1px solid #222;
+  padding: 1rem 1.5rem;
+}
+
+.preview {
+  background: #111;
+  overflow: hidden;
+}
+
+.label {
+  font-size: 0.9rem;
+  color: #ccc;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.input {
+  background: #1a1a1a;
+  border: 1px solid #333;
   color: white;
+  padding: 0.5rem;
+  border-radius: 8px;
+  width: 100%;
+  font-size: 1rem;
+}
+
+.input:focus {
+  border-color: #999;
+  outline: none;
+}
+
+.input-color {
+  width: 100%;
+  height: 40px;
+  border-radius: 8px;
+  border: none;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
 }
 
 .btn-primary {
   background: white;
   color: black;
-  font-weight: 600;
-  padding: 10px;
-  border-radius: 8px;
+  border-radius: 10px;
   transition: all 0.2s;
 }
 
@@ -22,13 +72,31 @@
 
 .btn-secondary {
   background: #222;
-  border: 1px solid #444;
-  color: white;
-  padding: 6px;
-  border-radius: 8px;
+  color: #aaa;
+  border-radius: 10px;
+  border: 1px solid #333;
   transition: all 0.2s;
 }
 
 .btn-secondary:hover {
   background: #333;
+  color: white;
+}
+
+iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* Tablet friendly scaling */
+@media (min-width: 1000px) {
+  .app-container {
+    grid-template-columns: 40% 60%;
+    grid-template-rows: none;
+  }
+  .controls {
+    border-right: 1px solid #222;
+    border-bottom: none;
+  }
 }

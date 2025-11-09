@@ -2,97 +2,92 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Generator Notatek</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Generator Notatek – Tablet</title>
+  <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body class="bg-black text-white font-sans h-screen overflow-hidden">
-  <div class="grid grid-cols-1 md:grid-cols-2 h-full">
+  <div class="app-container">
     
     <!-- PANEL USTAWIEŃ -->
-    <div class="p-6 md:p-10 bg-neutral-900 flex flex-col justify-between overflow-y-auto">
-      <div>
-        <h1 class="text-3xl font-bold mb-6 text-center">🧮 Generator Notatek</h1>
-
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block mb-1 text-sm font-medium">Typ</label>
-            <select id="type" class="input-select">
-              <option value="grid">Siatka kartezjańska</option>
-              <option value="table">Tabela</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block mb-1 text-sm font-medium">Format</label>
-            <select id="orientation" class="input-select">
-              <option value="portrait">A4</option>
-              <option value="landscape">A4 poziomo</option>
-              <option value="square">Kwadrat</option>
-            </select>
-          </div>
-
-          <div id="unitContainer">
-            <label class="block mb-1 text-sm font-medium">Jednostka (np. 1/2, 1)</label>
-            <input id="unit" type="text" value="1" class="input-text" />
-          </div>
-
-          <div id="fractionTypeContainer">
-            <label class="block mb-1 text-sm font-medium">Rodzaj zapisu</label>
-            <select id="fractionType" class="input-select">
-              <option value="fraction">Ułamek zwykły</option>
-              <option value="decimal">Dziesiętny</option>
-            </select>
-          </div>
-
-          <div id="colsContainer" class="hidden">
-            <label class="block mb-1 text-sm font-medium">Kolumny</label>
-            <input id="cols" type="number" value="5" min="1" class="input-text" />
-          </div>
-
-          <div id="rowsContainer" class="hidden">
-            <label class="block mb-1 text-sm font-medium">Wiersze</label>
-            <input id="rows" type="number" value="5" min="1" class="input-text" />
-          </div>
+    <section id="controls" class="controls">
+      <h1 class="text-2xl font-bold text-center mb-4">🧮 Generator Notatek</h1>
+      
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="label">Typ</label>
+          <select id="type" class="input">
+            <option value="grid">Siatka kartezjańska</option>
+            <option value="table">Tabela</option>
+          </select>
         </div>
 
-        <!-- OPCJE PODSTAWOWE -->
-        <div class="mt-6">
-          <h2 class="text-lg font-semibold mb-2">Podstawowe opcje</h2>
-          <div class="space-y-2">
-            <label class="block"><input type="checkbox" id="addHeader" class="mr-2">Nagłówek</label>
-            <label class="block"><input type="checkbox" id="addFooter" class="mr-2">Stopka</label>
-            <label class="block"><input type="checkbox" id="addMargins" class="mr-2">Marginesy</label>
-          </div>
+        <div>
+          <label class="label">Orientacja</label>
+          <select id="orientation" class="input">
+            <option value="portrait">Pionowa (A4)</option>
+            <option value="landscape">Pozioma (A4)</option>
+            <option value="square">Kwadrat</option>
+          </select>
         </div>
 
-        <!-- OPCJE ZAAWANSOWANE -->
-        <div class="mt-6">
-          <button id="toggleAdvanced" class="btn-secondary w-full">Pokaż zaawansowane opcje</button>
-          <div id="advancedOptions" class="hidden mt-4 space-y-3">
-            <div>
-              <label class="block mb-1 text-sm font-medium">Kolor siatki</label>
-              <input id="gridColor" type="color" value="#777777" class="input-color" />
-            </div>
-            <div>
-              <label class="block mb-1 text-sm font-medium">Rozmiar kratki (px)</label>
-              <input id="gridSize" type="number" value="28" class="input-text" />
-            </div>
-          </div>
+        <div id="unitContainer">
+          <label class="label">Jednostka</label>
+          <input id="unit" type="text" value="1" class="input" />
+        </div>
+
+        <div id="fractionTypeContainer">
+          <label class="label">Rodzaj zapisu</label>
+          <select id="fractionType" class="input">
+            <option value="fraction">Ułamki zwykłe</option>
+            <option value="decimal">Dziesiętne</option>
+          </select>
+        </div>
+
+        <div id="colsContainer" class="hidden">
+          <label class="label">Kolumny</label>
+          <input id="cols" type="number" value="5" class="input" />
+        </div>
+
+        <div id="rowsContainer" class="hidden">
+          <label class="label">Wiersze</label>
+          <input id="rows" type="number" value="5" class="input" />
         </div>
       </div>
 
-      <button id="generateBtn" class="btn-primary mt-8">Generuj PDF</button>
-      <p id="status" class="text-center mt-3 text-gray-400 text-sm"></p>
-    </div>
+      <!-- Opcje główne -->
+      <div class="grid grid-cols-3 gap-2 mb-4">
+        <label class="checkbox"><input type="checkbox" id="addHeader" /> Nagłówek</label>
+        <label class="checkbox"><input type="checkbox" id="addFooter" /> Stopka</label>
+        <label class="checkbox"><input type="checkbox" id="addMargins" /> Marginesy</label>
+      </div>
+
+      <!-- Zaawansowane -->
+      <button id="toggleAdvanced" class="btn-secondary w-full mb-3">Pokaż zaawansowane opcje</button>
+
+      <div id="advancedOptions" class="hidden space-y-3 mb-3">
+        <div>
+          <label class="label">Kolor siatki</label>
+          <input id="gridColor" type="color" value="#777777" class="input-color" />
+        </div>
+        <div>
+          <label class="label">Rozmiar kratki</label>
+          <input id="gridSize" type="number" value="28" class="input" />
+        </div>
+      </div>
+
+      <button id="generateBtn" class="btn-primary w-full py-3 text-lg font-bold mt-2">📄 Generuj</button>
+    </section>
 
     <!-- PODGLĄD -->
-    <div id="preview" class="bg-neutral-800 flex items-center justify-center text-gray-500">
-      <p>Tu pojawi się podgląd wygenerowanego PDF 📄</p>
-    </div>
+    <section id="preview" class="preview">
+      <div class="text-gray-400 flex items-center justify-center h-full text-center">
+        <p>Podgląd wygenerowanego PDF pojawi się tutaj</p>
+      </div>
+    </section>
+
   </div>
 
   <script src="script.js"></script>
