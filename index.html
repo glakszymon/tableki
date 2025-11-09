@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Generator Notatek – Dark Mode</title>
+  <title>Generator Notatek – Dark / Custom Mode</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <link rel="stylesheet" href="style.css" />
@@ -11,9 +11,10 @@
 <body class="bg-black text-white font-sans">
   <div class="flex flex-col items-center justify-center min-h-screen px-4">
     <div class="bg-neutral-900 p-8 rounded-2xl shadow-xl max-w-lg w-full border border-neutral-800">
-      <h1 class="text-2xl font-bold mb-6 text-center">🧮 Generator Notatek – Dark Mode</h1>
+      <h1 class="text-2xl font-bold mb-6 text-center">🧮 Generator Notatek</h1>
 
       <div class="space-y-4">
+        <!-- Typ dokumentu -->
         <div>
           <label class="block mb-1 text-sm font-medium">Typ dokumentu</label>
           <select id="type" class="w-full p-2 rounded bg-neutral-800 border border-neutral-700">
@@ -22,6 +23,7 @@
           </select>
         </div>
 
+        <!-- Orientacja -->
         <div>
           <label class="block mb-1 text-sm font-medium">Format</label>
           <select id="orientation" class="w-full p-2 rounded bg-neutral-800 border border-neutral-700">
@@ -30,11 +32,44 @@
           </select>
         </div>
 
+        <!-- Jednostka -->
         <div id="unitContainer">
           <label class="block mb-1 text-sm font-medium">Jednostka (np. 1, 1/2, 3/4)</label>
           <input id="unit" type="text" value="1" class="w-full p-2 rounded bg-neutral-800 border border-neutral-700" />
         </div>
 
+        <!-- Styl wartości -->
+        <div>
+          <label class="block mb-1 text-sm font-medium">Styl wartości osi</label>
+          <select id="valueStyle" class="w-full p-2 rounded bg-neutral-800 border border-neutral-700">
+            <option value="fraction">Ułamki zwykłe</option>
+            <option value="decimal">Dziesiętne</option>
+          </select>
+        </div>
+
+        <!-- Kolory -->
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block mb-1 text-xs">Kolor tła</label>
+            <input id="bgColor" type="color" value="#000000" class="w-full h-8 border border-neutral-600 rounded">
+          </div>
+          <div>
+            <label class="block mb-1 text-xs">Kolor siatki</label>
+            <input id="gridColor" type="color" value="#555555" class="w-full h-8 border border-neutral-600 rounded">
+          </div>
+          <div>
+            <label class="block mb-1 text-xs">Kolor osi</label>
+            <input id="axisColor" type="color" value="#FFFFFF" class="w-full h-8 border border-neutral-600 rounded">
+          </div>
+        </div>
+
+        <!-- Rozmiar kratek -->
+        <div>
+          <label class="block mb-1 text-sm font-medium">Rozmiar kratki (cm)</label>
+          <input id="spacing" type="number" step="0.1" value="1" min="0.1" class="w-full p-2 rounded bg-neutral-800 border border-neutral-700" />
+        </div>
+
+        <!-- Opcje tabeli -->
         <div id="tableOptions" class="hidden">
           <div class="flex gap-4">
             <div class="flex-1">
@@ -48,6 +83,7 @@
           </div>
         </div>
 
+        <!-- Przycisk -->
         <button id="generateBtn" class="w-full bg-white text-black font-semibold py-2 rounded hover:bg-gray-300 transition">
           Generuj PDF
         </button>

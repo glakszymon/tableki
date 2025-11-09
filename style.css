@@ -1,17 +1,14 @@
 html {
   scroll-behavior: smooth;
 }
-
 select, input {
   outline: none;
   transition: all 0.2s ease;
 }
-
 select:focus, input:focus {
-  border-color: #999;
+  border-color: #aaa;
   background-color: #222;
 }
-
 button:focus {
   outline: 2px solid #888;
   outline-offset: 2px;
