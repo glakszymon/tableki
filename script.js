@@ -14,10 +14,48 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("generateBtn").addEventListener("click", generatePDF);
 
+  function fractionToFloat(str) {
+    try {
+      if (str.includes("/")) {
+        const [a, b] = str.split("/").map(Number);
+        return a / b;
+      }
+      return parseFloat(str);
+    } catch {
+      return 1;
+    }
+  }
+
+  function toFractionString(value) {
+    const fraction = approximateFraction(value);
+    if (fraction.den === 1) return `${fraction.num}`;
+    if (Math.abs(fraction.num) > fraction.den) {
+      const whole = Math.trunc(fraction.num / fraction.den);
+      const rem = Math.abs(fraction.num % fraction.den);
+      return `${whole} ${rem}/${fraction.den}`;
+    }
+    return `${fraction.num}/${fraction.den}`;
+  }
+
+  function approximateFraction(x, maxDen = 8) {
+    let best = { num: Math.round(x), den: 1 };
+    let minErr = Math.abs(best.num / best.den - x);
+    for (let d = 1; d <= maxDen; d++) {
+      const n = Math.round(x * d);
+      const err = Math.abs(n / d - x);
+      if (err < minErr) {
+        best = { num: n, den: d };
+        minErr = err;
+      }
+    }
+    return best;
+  }
+
   function generatePDF() {
     const type = document.getElementById("type").value;
     const orientation = document.getElementById("orientation").value;
-    const unit = document.getElementById("unit").value;
+    const unitInput = document.getElementById("unit").value;
+    const unit = fractionToFloat(unitInput);
     const cols = parseInt(document.getElementById("cols").value);
     const rows = parseInt(document.getElementById("rows").value);
 
@@ -34,12 +72,11 @@ document.addEventListener("DOMContentLoaded", () => {
     doc.setFillColor(0, 0, 0);
     doc.rect(0, 0, width, height, "F");
 
-    doc.setDrawColor(255, 255, 255);
     doc.setTextColor(255, 255, 255);
 
     if (type === "grid") {
-      drawGrid(doc, width, height, unit);
-      const name = `siatka_dark_${unit.replace("/", "-")}.pdf`;
+      drawGrid(doc, width, height, unit, unitInput);
+      const name = `siatka_dark_${unitInput.replace("/", "-")}.pdf`;
       doc.save(name);
       status.textContent = `✅ Wygenerowano ${name}`;
     } else {
@@ -50,13 +87,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function drawGrid(doc, width, height, unitText) {
+  function drawGrid(doc, width, height, unit, unitText) {
     const centerX = width / 2;
     const centerY = height / 2;
-    const spacing = 28.35; // 1cm = 28.35pt
+    const spacing = 28.35; // 1 cm
 
-    // szare linie siatki
-    doc.setDrawColor(100, 100, 100);
+    // szara siatka
+    doc.setDrawColor(85, 85, 85);
     for (let x = centerX; x <= width; x += spacing) {
       doc.line(x, 0, x, height);
       doc.line(centerX - (x - centerX), 0, centerX - (x - centerX), height);
@@ -68,13 +105,45 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // osie
     doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(1);
     doc.line(centerX, 0, centerX, height);
     doc.line(0, centerY, width, centerY);
 
-    // podpisy osi
+    // strzałki osi
+    const arrow = 8;
+    doc.line(width - 10, centerY, width - arrow - 2, centerY - arrow);
+    doc.line(width - 10, centerY, width - arrow - 2, centerY + arrow);
+    doc.line(centerX, 10, centerX - arrow, 10 + arrow);
+    doc.line(centerX, 10, centerX + arrow, 10 + arrow);
+
+    // etykiety osi
     doc.setFontSize(10);
     doc.text("x", width - 15, centerY - 5);
-    doc.text("y", centerX + 5, 15);
+    doc.text("y", centerX + 8, 20);
+
+    // oznaczenia osi
+    doc.setFontSize(8);
+    const step = unit;
+    const maxX = Math.floor(width / (2 * spacing));
+    const maxY = Math.floor(height / (2 * spacing));
+
+    for (let i = -maxX; i <= maxX; i++) {
+      if (i === 0) continue;
+      const val = i * step;
+      const label = toFractionString(val);
+      const xPos = centerX + i * spacing;
+      doc.text(label, xPos - 5, centerY - 10, { align: "center" });
+      doc.line(xPos, centerY - 3, xPos, centerY + 3);
+    }
+
+    for (let j = -maxY; j <= maxY; j++) {
+      if (j === 0) continue;
+      const val = j * step;
+      const label = toFractionString(val);
+      const yPos = centerY - j * spacing;
+      doc.text(label, centerX + 8, yPos + 3);
+      doc.line(centerX - 3, yPos, centerX + 3, yPos);
+    }
 
     // podpis jednostki
     doc.setFontSize(9);
@@ -84,6 +153,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function drawTable(doc, width, height, cols, rows) {
     const cellW = width / cols;
     const cellH = height / rows;
+    doc.setDrawColor(255, 255, 255);
 
     for (let i = 0; i <= cols; i++) {
       doc.line(i * cellW, 0, i * cellW, height);
