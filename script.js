@@ -2,165 +2,154 @@ const { jsPDF } = window.jspdf;
 
 document.addEventListener("DOMContentLoaded", () => {
   const typeSelect = document.getElementById("type");
-  const unitContainer = document.getElementById("unitContainer");
-  const tableOptions = document.getElementById("tableOptions");
-  const advancedSettings = document.getElementById("advancedSettings");
-  const toggleBtn = document.getElementById("toggleAdvanced");
-  const status = document.getElementById("status");
+  const toggleAdvanced = document.getElementById("toggleAdvanced");
+  const advancedOptions = document.getElementById("advancedOptions");
+  const preview = document.getElementById("preview");
 
-  // przełączanie typu dokumentu
   typeSelect.addEventListener("change", () => {
     const type = typeSelect.value;
-    unitContainer.classList.toggle("hidden", type === "table");
-    tableOptions.classList.toggle("hidden", type === "grid");
+    document.getElementById("unitContainer").classList.toggle("hidden", type === "table");
+    document.getElementById("fractionTypeContainer").classList.toggle("hidden", type === "table");
+    document.getElementById("colsContainer").classList.toggle("hidden", type === "grid");
+    document.getElementById("rowsContainer").classList.toggle("hidden", type === "grid");
   });
 
-  // rozwijanie ustawień
-  toggleBtn.addEventListener("click", () => {
-    advancedSettings.classList.toggle("hidden");
-    toggleBtn.textContent = advancedSettings.classList.contains("hidden")
-      ? "⚙️ Pokaż ustawienia zaawansowane"
-      : "⬆️ Ukryj ustawienia zaawansowane";
+  toggleAdvanced.addEventListener("click", () => {
+    advancedOptions.classList.toggle("hidden");
+    toggleAdvanced.textContent = advancedOptions.classList.contains("hidden")
+      ? "Pokaż zaawansowane opcje"
+      : "Ukryj zaawansowane opcje";
   });
 
   document.getElementById("generateBtn").addEventListener("click", generatePDF);
 
-  // funkcje pomocnicze
-  function fractionToFloat(str) {
-    try {
-      if (str.includes("/")) {
-        const [a, b] = str.split("/").map(Number);
-        return a / b;
-      }
-      return parseFloat(str);
-    } catch {
-      return 1;
-    }
-  }
-
-  function toFractionString(value) {
-    const fraction = approximateFraction(value);
-    if (fraction.den === 1) return `${fraction.num}`;
-    if (Math.abs(fraction.num) > fraction.den) {
-      const whole = Math.trunc(fraction.num / fraction.den);
-      const rem = Math.abs(fraction.num % fraction.den);
-      return `${whole} ${rem}/${fraction.den}`;
-    }
-    return `${fraction.num}/${fraction.den}`;
-  }
-
-  function approximateFraction(x, maxDen = 8) {
-    let best = { num: Math.round(x), den: 1 };
-    let minErr = Math.abs(best.num / best.den - x);
-    for (let d = 1; d <= maxDen; d++) {
-      const n = Math.round(x * d);
-      const err = Math.abs(n / d - x);
-      if (err < minErr) {
-        best = { num: n, den: d };
-        minErr = err;
-      }
-    }
-    return best;
-  }
-
-  function hexToRGB(hex) {
-    const bigint = parseInt(hex.slice(1), 16);
-    return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
-  }
-
   function generatePDF() {
     const type = document.getElementById("type").value;
     const orientation = document.getElementById("orientation").value;
-    const unitInput = document.getElementById("unit").value;
-    const unit = fractionToFloat(unitInput);
-    const cols = parseInt(document.getElementById("cols")?.value || 5);
-    const rows = parseInt(document.getElementById("rows")?.value || 5);
-    const spacingCm = parseFloat(document.getElementById("spacing")?.value || 1);
-    const valueStyle = document.getElementById("valueStyle")?.value || "fraction";
+    const unit = document.getElementById("unit").value;
+    const fractionType = document.getElementById("fractionType").value;
+    const cols = parseInt(document.getElementById("cols").value);
+    const rows = parseInt(document.getElementById("rows").value);
+    const gridColor = document.getElementById("gridColor").value;
+    const gridSize = parseInt(document.getElementById("gridSize").value);
+    const addHeader = document.getElementById("addHeader").checked;
+    const addFooter = document.getElementById("addFooter").checked;
+    const addMargins = document.getElementById("addMargins").checked;
 
-    const [bgR, bgG, bgB] = hexToRGB(document.getElementById("bgColor")?.value || "#000000");
-    const [gridR, gridG, gridB] = hexToRGB(document.getElementById("gridColor")?.value || "#555555");
-    const [axisR, axisG, axisB] = hexToRGB(document.getElementById("axisColor")?.value || "#FFFFFF");
+    const format =
+      orientation === "square"
+        ? [500, 500]
+        : "a4";
 
-    const doc = new jsPDF({ orientation, unit: "pt", format: "a4" });
+    const doc = new jsPDF({
+      orientation: orientation === "landscape" ? "landscape" : "portrait",
+      unit: "pt",
+      format,
+    });
+
     const width = doc.internal.pageSize.getWidth();
     const height = doc.internal.pageSize.getHeight();
 
-    doc.setFillColor(bgR, bgG, bgB);
+    doc.setFillColor(0, 0, 0);
     doc.rect(0, 0, width, height, "F");
-    doc.setTextColor(axisR, axisG, axisB);
 
-    if (type === "grid") {
-      drawGrid(doc, width, height, unit, unitInput, spacingCm, valueStyle, gridR, gridG, gridB, axisR, axisG, axisB);
-      const name = `siatka_${unitInput.replace("/", "-")}.pdf`;
-      doc.save(name);
-      status.textContent = `✅ Wygenerowano ${name}`;
-    } else {
-      drawTable(doc, width, height, cols, rows, axisR, axisG, axisB);
-      const name = `tabela_${cols}x${rows}.pdf`;
-      doc.save(name);
-      status.textContent = `✅ Wygenerowano ${name}`;
-    }
+    if (addHeader) doc.text("Nagłówek", width / 2 - 25, 25);
+    if (addFooter) doc.text("Stopka", width / 2 - 20, height - 20);
+
+    doc.setDrawColor(...hexToRgb(gridColor));
+
+    if (type === "grid") drawGrid(doc, width, height, gridSize, unit, fractionType, addMargins);
+    else drawTable(doc, width, height, cols, rows);
+
+    const pdfBlob = doc.output("blob");
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+
+    preview.innerHTML = `<iframe src="${pdfUrl}" class="w-full h-full border-none"></iframe>`;
   }
 
-  function drawGrid(doc, width, height, unit, unitText, spacingCm, valueStyle, gridR, gridG, gridB, axisR, axisG, axisB) {
+  function drawGrid(doc, width, height, spacing, unitText, fractionType, addMargins) {
+    const margin = addMargins ? 40 : 0;
     const centerX = width / 2;
     const centerY = height / 2;
-    const spacing = 28.35 * spacingCm;
 
-    // siatka
-    doc.setDrawColor(gridR, gridG, gridB);
-    for (let x = centerX; x <= width; x += spacing) {
-      doc.line(x, 0, x, height);
-      doc.line(centerX - (x - centerX), 0, centerX - (x - centerX), height);
+    for (let x = centerX; x <= width - margin; x += spacing) {
+      doc.line(x, margin, x, height - margin);
+      doc.line(centerX - (x - centerX), margin, centerX - (x - centerX), height - margin);
     }
-    for (let y = centerY; y <= height; y += spacing) {
-      doc.line(0, y, width, y);
-      doc.line(0, centerY - (y - centerY), width, centerY - (y - centerY));
+    for (let y = centerY; y <= height - margin; y += spacing) {
+      doc.line(margin, y, width - margin, y);
+      doc.line(margin, centerY - (y - centerY), width - margin, centerY - (y - centerY));
     }
 
-    // osie
-    doc.setDrawColor(axisR, axisG, axisB);
-    doc.setLineWidth(1);
-    doc.line(centerX, 0, centerX, height);
-    doc.line(0, centerY, width, centerY);
+    doc.setDrawColor(255, 255, 255);
+    doc.line(centerX, margin, centerX, height - margin);
+    doc.line(margin, centerY, width - margin, centerY);
 
-    // oznaczenia
-    doc.setFontSize(10);
-    doc.text("x", width - 15, centerY - 5);
-    doc.text("y", centerX + 8, 20);
+    doc.setTextColor(255, 255, 255);
+    doc.text("x", width - margin - 10, centerY - 5);
+    doc.text("y", centerX + 5, margin + 10);
 
+    const stepFraction = parseFraction(unitText);
+    const rangeX = Math.floor((width / 2) / spacing);
+    const rangeY = Math.floor((height / 2) / spacing);
+    const fixedDen = stepFraction.den; // stały mianownik z jednostki
+    const stepValue = stepFraction.num / fixedDen;
     doc.setFontSize(8);
-    const maxX = Math.floor(width / (2 * spacing));
-    const maxY = Math.floor(height / (2 * spacing));
 
-    for (let i = -maxX; i <= maxX; i++) {
-      if (i === 0) continue;
-      const val = i * unit;
-      const label = valueStyle === "fraction" ? toFractionString(val) : val.toFixed(2);
-      const xPos = centerX + i * spacing;
-      doc.text(label, xPos - 5, centerY - 10, { align: "center" });
-      doc.line(xPos, centerY - 3, xPos, centerY + 3);
+    for (let i = 1; i <= rangeX; i++) {
+      const val = i * stepValue;
+      const label = fractionType === "fraction" ? toFixedDenominator(val, fixedDen) : val.toFixed(2);
+      const posR = centerX + i * spacing;
+      const posL = centerX - i * spacing;
+      doc.text(label, posR - 5, centerY + 12);
+      doc.text("-" + label, posL - 10, centerY + 12);
+      doc.line(posR, centerY - 3, posR, centerY + 3);
+      doc.line(posL, centerY - 3, posL, centerY + 3);
     }
 
-    for (let j = -maxY; j <= maxY; j++) {
-      if (j === 0) continue;
-      const val = j * unit;
-      const label = valueStyle === "fraction" ? toFractionString(val) : val.toFixed(2);
-      const yPos = centerY - j * spacing;
-      doc.text(label, centerX + 8, yPos + 3);
-      doc.line(centerX - 3, yPos, centerX + 3, yPos);
+    for (let j = 1; j <= rangeY; j++) {
+      const val = j * stepValue;
+      const label = fractionType === "fraction" ? toFixedDenominator(val, fixedDen) : val.toFixed(2);
+      const posU = centerY - j * spacing;
+      const posD = centerY + j * spacing;
+      doc.text(label, centerX + 6, posU + 3);
+      doc.text("-" + label, centerX + 6, posD + 3);
+      doc.line(centerX - 3, posU, centerX + 3, posU);
+      doc.line(centerX - 3, posD, centerX + 3, posD);
     }
-
-    doc.setFontSize(9);
-    doc.text(`Jednostka osi = ${unitText}`, 40, height - 40);
   }
 
-  function drawTable(doc, width, height, cols, rows, axisR, axisG, axisB) {
+  function drawTable(doc, width, height, cols, rows) {
     const cellW = width / cols;
     const cellH = height / rows;
-    doc.setDrawColor(axisR, axisG, axisB);
+    doc.setDrawColor(255, 255, 255);
     for (let i = 0; i <= cols; i++) doc.line(i * cellW, 0, i * cellW, height);
     for (let j = 0; j <= rows; j++) doc.line(0, j * cellH, width, j * cellH);
+  }
+
+  // Parsowanie jednostki np. "1/10" -> { num: 1, den: 10 }
+  function parseFraction(str) {
+    if (str.includes("/")) {
+      const [a, b] = str.split("/").map(Number);
+      return { num: a, den: b };
+    }
+    const val = parseFloat(str) || 1;
+    return { num: val, den: 1 };
+  }
+
+  // Stały mianownik — np. 1/10 → 1/10, 2/10, 3/10, 1, 1 1/10, ...
+  function toFixedDenominator(value, fixedDen) {
+    const totalNum = Math.round(value * fixedDen);
+    const whole = Math.floor(totalNum / fixedDen);
+    const num = totalNum % fixedDen;
+
+    if (num === 0) return `${whole}`;
+    if (whole === 0) return `${num}/${fixedDen}`;
+    return `${whole} ${num}/${fixedDen}`;
+  }
+
+  function hexToRgb(hex) {
+    const bigint = parseInt(hex.replace("#", ""), 16);
+    return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
   }
 });
