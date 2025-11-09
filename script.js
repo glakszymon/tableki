@@ -4,16 +4,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const typeSelect = document.getElementById("type");
   const unitContainer = document.getElementById("unitContainer");
   const tableOptions = document.getElementById("tableOptions");
+  const advancedSettings = document.getElementById("advancedSettings");
+  const toggleBtn = document.getElementById("toggleAdvanced");
   const status = document.getElementById("status");
 
+  // przełączanie typu dokumentu
   typeSelect.addEventListener("change", () => {
     const type = typeSelect.value;
     unitContainer.classList.toggle("hidden", type === "table");
     tableOptions.classList.toggle("hidden", type === "grid");
   });
 
+  // rozwijanie ustawień
+  toggleBtn.addEventListener("click", () => {
+    advancedSettings.classList.toggle("hidden");
+    toggleBtn.textContent = advancedSettings.classList.contains("hidden")
+      ? "⚙️ Pokaż ustawienia zaawansowane"
+      : "⬆️ Ukryj ustawienia zaawansowane";
+  });
+
   document.getElementById("generateBtn").addEventListener("click", generatePDF);
 
+  // funkcje pomocnicze
   function fractionToFloat(str) {
     try {
       if (str.includes("/")) {
@@ -53,10 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function hexToRGB(hex) {
     const bigint = parseInt(hex.slice(1), 16);
-    const r = (bigint >> 16) & 255;
-    const g = (bigint >> 8) & 255;
-    const b = bigint & 255;
-    return [r, g, b];
+    return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
   }
 
   function generatePDF() {
@@ -64,28 +73,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const orientation = document.getElementById("orientation").value;
     const unitInput = document.getElementById("unit").value;
     const unit = fractionToFloat(unitInput);
-    const cols = parseInt(document.getElementById("cols").value);
-    const rows = parseInt(document.getElementById("rows").value);
-    const spacingCm = parseFloat(document.getElementById("spacing").value);
-    const valueStyle = document.getElementById("valueStyle").value;
+    const cols = parseInt(document.getElementById("cols")?.value || 5);
+    const rows = parseInt(document.getElementById("rows")?.value || 5);
+    const spacingCm = parseFloat(document.getElementById("spacing")?.value || 1);
+    const valueStyle = document.getElementById("valueStyle")?.value || "fraction";
 
-    const [bgR, bgG, bgB] = hexToRGB(document.getElementById("bgColor").value);
-    const [gridR, gridG, gridB] = hexToRGB(document.getElementById("gridColor").value);
-    const [axisR, axisG, axisB] = hexToRGB(document.getElementById("axisColor").value);
+    const [bgR, bgG, bgB] = hexToRGB(document.getElementById("bgColor")?.value || "#000000");
+    const [gridR, gridG, gridB] = hexToRGB(document.getElementById("gridColor")?.value || "#555555");
+    const [axisR, axisG, axisB] = hexToRGB(document.getElementById("axisColor")?.value || "#FFFFFF");
 
-    const doc = new jsPDF({
-      orientation: orientation,
-      unit: "pt",
-      format: "a4",
-    });
-
+    const doc = new jsPDF({ orientation, unit: "pt", format: "a4" });
     const width = doc.internal.pageSize.getWidth();
     const height = doc.internal.pageSize.getHeight();
 
-    // tło
     doc.setFillColor(bgR, bgG, bgB);
     doc.rect(0, 0, width, height, "F");
-
     doc.setTextColor(axisR, axisG, axisB);
 
     if (type === "grid") {
@@ -123,12 +125,11 @@ document.addEventListener("DOMContentLoaded", () => {
     doc.line(centerX, 0, centerX, height);
     doc.line(0, centerY, width, centerY);
 
-    // oznaczenia osi
+    // oznaczenia
     doc.setFontSize(10);
     doc.text("x", width - 15, centerY - 5);
     doc.text("y", centerX + 8, 20);
 
-    // wartości osi
     doc.setFontSize(8);
     const maxX = Math.floor(width / (2 * spacing));
     const maxY = Math.floor(height / (2 * spacing));
@@ -159,12 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const cellW = width / cols;
     const cellH = height / rows;
     doc.setDrawColor(axisR, axisG, axisB);
-
-    for (let i = 0; i <= cols; i++) {
-      doc.line(i * cellW, 0, i * cellW, height);
-    }
-    for (let j = 0; j <= rows; j++) {
-      doc.line(0, j * cellH, width, j * cellH);
-    }
+    for (let i = 0; i <= cols; i++) doc.line(i * cellW, 0, i * cellW, height);
+    for (let j = 0; j <= rows; j++) doc.line(0, j * cellH, width, j * cellH);
   }
 });
