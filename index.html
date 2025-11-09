@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Generator Notatek – Dark Mode</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-black text-white font-sans">
+  <div class="flex flex-col items-center justify-center min-h-screen px-4">
+    <div class="bg-neutral-900 p-8 rounded-2xl shadow-xl max-w-lg w-full">
+      <h1 class="text-2xl font-bold mb-6 text-center">🧮 Generator Notatek – Dark Mode</h1>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block mb-1 text-sm font-medium">Typ dokumentu</label>
+          <select id="type" class="w-full p-2 rounded bg-neutral-800 border border-neutral-700">
+            <option value="grid">Siatka kartezjańska</option>
+            <option value="table">Tabela</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block mb-1 text-sm font-medium">Format</label>
+          <select id="orientation" class="w-full p-2 rounded bg-neutral-800 border border-neutral-700">
+            <option value="portrait">A4</option>
+            <option value="landscape">A4 poziomo</option>
+          </select>
+        </div>
+
+        <div id="unitContainer">
+          <label class="block mb-1 text-sm font-medium">Jednostka (np. 1, 1/2, 3/4)</label>
+          <input id="unit" type="text" value="1" class="w-full p-2 rounded bg-neutral-800 border border-neutral-700" />
+        </div>
+
+        <div id="tableOptions" class="hidden">
+          <div class="flex gap-4">
+            <div class="flex-1">
+              <label class="block mb-1 text-sm font-medium">Kolumny</label>
+              <input id="cols" type="number" value="5" min="1" class="w-full p-2 rounded bg-neutral-800 border border-neutral-700" />
+            </div>
+            <div class="flex-1">
+              <label class="block mb-1 text-sm font-medium">Wiersze</label>
+              <input id="rows" type="number" value="5" min="1" class="w-full p-2 rounded bg-neutral-800 border border-neutral-700" />
+            </div>
+          </div>
+        </div>
+
+        <button id="generateBtn" class="w-full bg-white text-black font-semibold py-2 rounded hover:bg-gray-300 transition">Generuj PDF</button>
+      </div>
+
+      <p id="status" class="text-center mt-4 text-sm text-gray-400"></p>
+    </div>
+
+    <footer class="mt-8 text-xs text-gray-600">© 2025 Generator Notatek</footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
