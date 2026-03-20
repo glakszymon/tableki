@@ -14,7 +14,7 @@
 <div id="app">
 
   <!-- ══════════════════════════════════════════════════════════════
-       TOPBAR (mobile tylko)
+       TOPBAR — zawsze widoczny na górze
   ══════════════════════════════════════════════════════════════ -->
   <div class="topbar">
     <div class="topbar-brand">
@@ -27,18 +27,19 @@
         <line x1="17" y1="10" x2="14.8" y2="9" stroke="currentColor" stroke-width="1"/>
         <line x1="17" y1="10" x2="14.8" y2="11" stroke="currentColor" stroke-width="1"/>
       </svg>
-      NoteGrid
+      <span class="topbar-name">NoteGrid</span>
     </div>
     <div class="topbar-right">
       <button class="topbar-gen" @click="generate" :class="{ loading: isGenerating }">
-        <span v-if="!isGenerating">PDF</span>
+        <span v-if="!isGenerating">Generuj PDF</span>
         <span v-else class="gen-dots"><i></i><i></i><i></i></span>
       </button>
-      <button class="topbar-dl" :disabled="!pdfReady" @click="download">
+      <button class="topbar-dl" :disabled="!pdfReady" @click="download" title="Pobierz PDF">
         <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
           <path d="M7.5 2v8M5 7.5l2.5 2.5 2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M2 12.5h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
         </svg>
+        <span class="dl-label">Pobierz</span>
       </button>
       <button class="hamburger" @click="toggleSidebar" :class="{ open: sidebarOpen }">
         <span></span><span></span><span></span>
@@ -239,7 +240,7 @@
 
       </div><!-- /sidebar-body -->
 
-      <!-- Footer sidebara -->
+      <!-- Footer sidebara — tylko preset i reset -->
       <div class="sidebar-foot">
         <button class="foot-icon" @click="resetDefaults" title="Przywróć domyślne">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -261,16 +262,6 @@
           </svg>
           Wczytaj
           <span v-if="savedPresets.length" class="preset-count">{{ savedPresets.length }}</span>
-        </button>
-        <button class="foot-gen" :class="{ loading: isGenerating }" @click="generate">
-          <span v-if="!isGenerating">Generuj PDF</span>
-          <span v-else class="gen-dots"><i></i><i></i><i></i></span>
-        </button>
-        <button class="foot-icon" :disabled="!pdfReady" @click="download">
-          <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-            <path d="M7.5 2v8M5 7.5l2.5 2.5 2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M2 12.5h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-          </svg>
         </button>
       </div>
 
