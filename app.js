@@ -1,17 +1,29 @@
 /**
- * app.js — NoteGrid Vue 3 application
+ * app.js — NoteGrid Vue 3
  */
 
 const { createApp, ref, reactive, computed, onMounted, nextTick } = Vue;
 
+// ── Presets ───────────────────────────────────────────────────────────────────
+// Dimensions in pt (1 pt = 1/72 inch; A4 = 595×842 pt)
+const PRESETS = [
+  { id: 'a4p',      label: 'A4',          w: 595,  h: 842  },
+  { id: 'a4l',      label: 'A4 poziom',   w: 842,  h: 595  },
+  { id: 'a4x2',     label: 'A4×2',        w: 595,  h: 1684 },
+  { id: 'ipad11',   label: 'iPad 11"',    w: 768,  h: 1024 },
+  { id: 'ipad13',   label: 'iPad 13"',    w: 1024, h: 1366 },
+  { id: 'ipadpro',  label: 'iPad Pro',    w: 834,  h: 1194 },
+];
+
+// ── Default config ────────────────────────────────────────────────────────────
 const DEFAULT_CFG = () => ({
-  pageW: 1240,
-  pageH: 1754,
+  pageW: 595,
+  pageH: 1684,   // A4×2 default
 
   sections: [
-    { id: 'task', name: 'Polecenie',        icon: '✏️', pct: 20, enabled: true  },
-    { id: 'grid', name: 'Układ wsp.',       icon: '#',  pct: 55, enabled: true  },
-    { id: 'work', name: 'Obliczenia',       icon: '📝', pct: 25, enabled: true  },
+    { id: 'task', name: 'Polecenie',  pct: 18, enabled: true  },
+    { id: 'grid', name: 'Siatka',    pct: 52, enabled: true  },
+    { id: 'work', name: 'Obliczenia', pct: 30, enabled: true  },
   ],
 
   xMin: -10, xMax: 10,
@@ -23,90 +35,95 @@ const DEFAULT_CFG = () => ({
   boldAxes: true,
 
   colors: {
-    taskBg:   '#f8f6f2',
-    taskText: '#1a1816',
+    taskBg:   '#faf8f5',
+    taskText: '#2a2520',
     gridBg:   '#ffffff',
-    grid:     '#cccccc',
-    axes:     '#1a1816',
-    workBg:   '#fdfcfb',
+    grid:     '#d0c8bf',
+    axes:     '#2a2520',
+    workBg:   '#fdfcfa',
   },
 
   gridLineW:    0.5,
-  axisLineW:    1.5,
-  taskFontSize: 13,
+  axisLineW:    1.4,
   labelFontSize: 9,
-  taskText: '',
+
+  gridMargin: { top: 32, right: 32, bottom: 32, left: 32 },
 });
 
-const PRESETS = [
-  { label: 'A4 pion',    w: 595,  h: 842  },
-  { label: 'A4 poziom',  w: 842,  h: 595  },
-  { label: 'Tablet 11"', w: 1668, h: 2224 },
-  { label: 'Tablet 13"', w: 2048, h: 2732 },
-  { label: 'Tablica',    w: 2480, h: 3508 },
-  { label: 'Kwadrat',    w: 1200, h: 1200 },
-];
-
+// ── App ───────────────────────────────────────────────────────────────────────
 createApp({
   setup() {
-    const cfg        = reactive(DEFAULT_CFG());
-    const canvas     = ref(null);
-    const previewWrap = ref(null);
+    const cfg          = reactive(DEFAULT_CFG());
+    const canvas       = ref(null);
     const isGenerating = ref(false);
-    const pdfReady   = ref(false);
-    const activePreset = ref('Tablet 11"');
-    let   pdfBlob    = null;
-    let   pdfFilename = 'notegrid.pdf';
+    const pdfReady     = ref(false);
+    const activePreset = ref('a4x2');
+    let   pdfBlob      = null;
+    let   pdfName      = 'notegrid.pdf';
     let   previewTimer = null;
 
-    const presets = PRESETS;
+    // ── Computed ──────────────────────────────────────────────
+    const pctSum = computed(() =>
+      cfg.sections.filter(s => s.enabled).reduce((a, s) => a + s.pct, 0)
+    );
 
-    const colorFields = [
-      { key: 'taskBg',   label: 'Tło polecenia'  },
-      { key: 'taskText', label: 'Tekst polecenia' },
-      { key: 'gridBg',   label: 'Tło siatki'     },
-      { key: 'grid',     label: 'Linie siatki'   },
-      { key: 'axes',     label: 'Osie + etykiety' },
-      { key: 'workBg',   label: 'Tło obliczeń'   },
-    ];
+    // ── Preset thumbnails ─────────────────────────────────────
+    function thumbStyle(p) {
+      const BOX = 32;
+      const ratio = p.w / p.h;
+      let tw, th;
+      if (ratio >= 1) { tw = BOX; th = Math.round(BOX / ratio); }
+      else            { th = BOX; tw = Math.round(BOX * ratio); }
+      return { width: tw + 'px', height: th + 'px' };
+    }
 
-    const pctSum = computed(() => {
-      return cfg.sections
-        .filter(s => s.enabled)
-        .reduce((sum, s) => sum + s.pct, 0);
-    });
-
-    // ── Methods ─────────────────────────────────────────────────
-
+    // ── Preset apply ──────────────────────────────────────────
     function applyPreset(p) {
       cfg.pageW = p.w;
       cfg.pageH = p.h;
-      activePreset.value = p.label;
+      activePreset.value = p.id;
       schedulePreview();
     }
 
-    function resetDefaults() {
-      const d = DEFAULT_CFG();
-      Object.assign(cfg, d);
-      cfg.sections = d.sections;
-      cfg.colors = { ...d.colors };
-      activePreset.value = 'Tablet 11"';
-      pdfReady.value = false;
+    // ── Rotate ────────────────────────────────────────────────
+    function rotateFormat() {
+      const tmp = cfg.pageW;
+      cfg.pageW = cfg.pageH;
+      cfg.pageH = tmp;
+      // Update active preset if it matches swapped dims
+      const match = PRESETS.find(p => p.w === cfg.pageW && p.h === cfg.pageH);
+      activePreset.value = match ? match.id : null;
       schedulePreview();
     }
 
+    // ── Custom size input ─────────────────────────────────────
+    function onCustomSize() {
+      const match = PRESETS.find(p => p.w === cfg.pageW && p.h === cfg.pageH);
+      activePreset.value = match ? match.id : null;
+      schedulePreview();
+    }
+
+    // ── Sections ──────────────────────────────────────────────
     function normalizePct() {
       const active = cfg.sections.filter(s => s.enabled);
       if (!active.length) return;
       const each = Math.floor(100 / active.length);
-      let rem = 100 - each * active.length;
+      const rem  = 100 - each * active.length;
       active.forEach((s, i) => { s.pct = each + (i === 0 ? rem : 0); });
       schedulePreview();
     }
 
+    // ── Sync margins ──────────────────────────────────────────
+    function syncMargins() {
+      const avg = Math.round((cfg.gridMargin.top + cfg.gridMargin.right + cfg.gridMargin.bottom + cfg.gridMargin.left) / 4);
+      cfg.gridMargin.top = cfg.gridMargin.right = cfg.gridMargin.bottom = cfg.gridMargin.left = avg;
+      schedulePreview();
+    }
+
+    // ── Preview ───────────────────────────────────────────────
     function schedulePreview() {
       clearTimeout(previewTimer);
-      previewTimer = setTimeout(drawPreview, 80);
+      previewTimer = setTimeout(drawPreview, 60);
     }
 
     function drawPreview() {
@@ -114,6 +131,7 @@ createApp({
       window.NoteGridPDF.renderToCanvas(canvas.value, cfg);
     }
 
+    // ── Generate PDF ──────────────────────────────────────────
     async function generate() {
       isGenerating.value = true;
       await nextTick();
@@ -121,38 +139,64 @@ createApp({
         try {
           const doc = window.NoteGridPDF.generatePDF(cfg);
           pdfBlob = doc.output('blob');
-          pdfFilename = `notegrid_${cfg.pageW}x${cfg.pageH}.pdf`;
+          pdfName = `notegrid_${cfg.pageW}x${cfg.pageH}.pdf`;
           pdfReady.value = true;
-        } catch (e) {
-          console.error('PDF generation error:', e);
+        } catch (err) {
+          console.error('PDF error:', err);
         }
         isGenerating.value = false;
       }, 60);
     }
 
+    // ── Download ──────────────────────────────────────────────
     function download() {
       if (!pdfBlob) return;
       const a = document.createElement('a');
       a.href = URL.createObjectURL(pdfBlob);
-      a.download = pdfFilename;
+      a.download = pdfName;
       a.click();
     }
 
-    onMounted(() => {
-      // Set default preset
-      applyPreset(PRESETS.find(p => p.label === 'Tablet 11"'));
+    // ── Reset ─────────────────────────────────────────────────
+    function resetDefaults() {
+      const d = DEFAULT_CFG();
+      Object.assign(cfg, d);
+      cfg.sections = d.sections.map(s => ({ ...s }));
+      cfg.colors   = { ...d.colors };
+      cfg.gridMargin = { ...d.gridMargin };
+      activePreset.value = 'a4x2';
+      pdfReady.value = false;
+      schedulePreview();
+    }
 
-      // Re-draw on window resize
+    // ── Mount ─────────────────────────────────────────────────
+    onMounted(() => {
+      schedulePreview();
       window.addEventListener('resize', schedulePreview);
     });
 
     return {
-      cfg, canvas, previewWrap,
+      cfg, canvas,
       isGenerating, pdfReady,
-      presets, activePreset, colorFields,
+      presets: PRESETS,
+      activePreset,
       pctSum,
-      applyPreset, resetDefaults, normalizePct,
-      schedulePreview, generate, download,
+      colorFields: [
+        { key: 'taskBg',   label: 'Tło polecenia'  },
+        { key: 'gridBg',   label: 'Tło siatki'     },
+        { key: 'grid',     label: 'Linie siatki'   },
+        { key: 'axes',     label: 'Osie + etykiety' },
+        { key: 'workBg',   label: 'Tło obliczeń'   },
+      ],
+      axisToggles: [
+        { key: 'showAxisLabels', label: 'Etykiety osi (x, y)' },
+        { key: 'showArrows',     label: 'Strzałki na osiach'  },
+        { key: 'boldAxes',       label: 'Grube osie główne'   },
+      ],
+      thumbStyle,
+      applyPreset, rotateFormat, onCustomSize,
+      normalizePct, schedulePreview, syncMargins,
+      generate, download, resetDefaults,
     };
   }
 }).mount('#app');

@@ -1,14 +1,13 @@
 /**
- * pdf.js — NoteGrid
- * Rendering engine: draws the worksheet onto a canvas (for live preview)
- * and generates a jsPDF document with the same layout.
+ * pdf.js — NoteGrid rendering engine
+ * Shared logic for canvas preview and jsPDF export.
  */
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function hexToRgb(hex) {
-  const n = parseInt(hex.replace('#', ''), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const c = parseInt(hex.replace('#', ''), 16);
+  return [(c >> 16) & 255, (c >> 8) & 255, c & 255];
 }
 
 function parseFraction(str) {
@@ -20,39 +19,33 @@ function parseFraction(str) {
   return parseFloat(str) || 1;
 }
 
-function formatLabel(value, mode) {
+function niceLabel(value, mode) {
   if (mode === 'none') return null;
-  if (mode === 'decimal') return value.toFixed(2).replace(/\.?0+$/, '');
-
-  // fraction mode — keep denominator from step if possible, else simplify
-  const frac = toNiceFraction(value);
-  return frac;
-}
-
-function toNiceFraction(value) {
+  if (mode === 'decimal') {
+    const s = value.toFixed(4).replace(/\.?0+$/, '');
+    return s === '-0' ? '0' : s;
+  }
+  // fraction
   if (Number.isInteger(value)) return String(value);
-  const dens = [2, 3, 4, 5, 6, 8, 10, 12];
-  for (const d of dens) {
+  for (const d of [2, 3, 4, 5, 6, 8, 10, 12]) {
     const n = Math.round(value * d);
-    if (Math.abs(n / d - value) < 0.0001) {
-      const whole = Math.floor(n / d);
-      const rem = n % d;
-      if (rem === 0) return String(whole);
-      if (whole === 0) return `${rem}/${d}`;
-      return `${whole} ${Math.abs(rem)}/${d}`;
+    if (Math.abs(n / d - value) < 1e-5) {
+      const whole = Math.floor(Math.abs(n) / d);
+      const rem   = Math.abs(n) % d;
+      const sign  = value < 0 ? '-' : '';
+      if (rem === 0) return sign + whole;
+      if (whole === 0) return `${sign}${rem}/${d}`;
+      return `${sign}${whole} ${rem}/${d}`;
     }
   }
   return value.toFixed(2).replace(/\.?0+$/, '');
 }
 
-// ── Core draw function ────────────────────────────────────────────────────────
-// Works on an abstract "context" adapter so the same logic renders
-// to both Canvas2D (preview) and jsPDF (export).
+// ── Layout builder ────────────────────────────────────────────────────────────
 
 function buildLayout(cfg) {
-  // Resolve active sections and their pixel heights
   const active = cfg.sections.filter(s => s.enabled);
-  const total = active.reduce((sum, s) => sum + s.pct, 0) || 100;
+  const total  = active.reduce((a, s) => a + s.pct, 0) || 100;
   let y = 0;
   return active.map(s => {
     const h = (s.pct / total) * cfg.pageH;
@@ -62,231 +55,207 @@ function buildLayout(cfg) {
   });
 }
 
-// ── Canvas 2D renderer (live preview) ────────────────────────────────────────
+// ── Canvas preview ────────────────────────────────────────────────────────────
 
 function renderToCanvas(canvas, cfg) {
-  const W = cfg.pageW;
-  const H = cfg.pageH;
-
-  // Scale to fit container nicely
+  const W = cfg.pageW, H = cfg.pageH;
   const wrap = canvas.parentElement;
-  const maxW = wrap ? wrap.clientWidth - 40 : W;
-  const maxH = wrap ? wrap.clientHeight - 40 : H;
-  const scale = Math.min(1, maxW / W, maxH / H);
+  // Use full available area — allow upscaling too, cap at 3x for perf
+  const avW  = wrap ? wrap.clientWidth  - 32 : W;
+  const avH  = wrap ? wrap.clientHeight - 32 : H;
+  const scale = Math.min(3, avW / W, avH / H);
 
-  canvas.width  = Math.round(W * scale);
-  canvas.height = Math.round(H * scale);
-  canvas.style.width  = canvas.width + 'px';
-  canvas.style.height = canvas.height + 'px';
+  // Use devicePixelRatio for sharp rendering on HiDPI screens
+  const dpr = window.devicePixelRatio || 1;
+  const displayW = Math.round(W * scale);
+  const displayH = Math.round(H * scale);
+
+  canvas.width  = displayW * dpr;
+  canvas.height = displayH * dpr;
+  canvas.style.width  = displayW + 'px';
+  canvas.style.height = displayH + 'px';
 
   const ctx = canvas.getContext('2d');
-  ctx.scale(scale, scale);
-
-  drawSheet(ctx, W, H, cfg);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.scale(scale * dpr, scale * dpr);
+  drawSheet_ctx(ctx, W, H, cfg);
+  ctx.restore();
 }
 
-function drawSheet(ctx, W, H, cfg) {
+function drawSheet_ctx(ctx, W, H, cfg) {
   const layout = buildLayout(cfg);
-
   for (const seg of layout) {
-    if (seg.id === 'task')   drawTaskSection(ctx, 0, seg.y, W, seg.h, cfg);
-    if (seg.id === 'grid')   drawGridSection(ctx, 0, seg.y, W, seg.h, cfg);
-    if (seg.id === 'work')   drawWorkSection(ctx, 0, seg.y, W, seg.h, cfg);
+    switch (seg.id) {
+      case 'task': drawTask_ctx(ctx, 0, seg.y, W, seg.h, cfg); break;
+      case 'grid': drawGrid_ctx(ctx, 0, seg.y, W, seg.h, cfg); break;
+      case 'work': drawWork_ctx(ctx, 0, seg.y, W, seg.h, cfg); break;
+    }
   }
-
-  // Outer border
-  ctx.strokeStyle = '#cccccc';
+  // Sheet shadow / border
+  ctx.strokeStyle = '#c8c0b8';
   ctx.lineWidth = 0.5;
   ctx.strokeRect(0, 0, W, H);
 }
 
-// Task (polecenie) section
-function drawTaskSection(ctx, x, y, w, h, cfg) {
-  const bg = cfg.colors.taskBg;
-  ctx.fillStyle = bg;
+// ── Task section (canvas) ─────────────────────────────────────────────────────
+function drawTask_ctx(ctx, x, y, w, h, cfg) {
+  // Background
+  ctx.fillStyle = cfg.colors.taskBg;
   ctx.fillRect(x, y, w, h);
 
-  // Thin bottom border
+  // Separator line at bottom
   ctx.strokeStyle = cfg.colors.grid;
   ctx.lineWidth = 0.8;
   ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x + w, y + h); ctx.stroke();
 
-  // Text
-  if (cfg.taskText) {
-    ctx.fillStyle = cfg.colors.taskText;
-    ctx.font = `${cfg.taskFontSize}px 'IBM Plex Sans', sans-serif`;
-    const pad = 16;
-    const lineH = cfg.taskFontSize * 1.5;
-    const words = cfg.taskText.split(' ');
-    let line = '', lineY = y + pad + cfg.taskFontSize;
-    for (const word of words) {
-      const test = line ? line + ' ' + word : word;
-      if (ctx.measureText(test).width > w - pad * 2 && line) {
-        ctx.fillText(line, x + pad, lineY);
-        line = word; lineY += lineH;
-        if (lineY > y + h - 4) break;
-      } else line = test;
-    }
-    if (line) ctx.fillText(line, x + pad, lineY);
-  } else {
-    // Placeholder lines
-    ctx.fillStyle = cfg.colors.grid;
-    const pad = 16; const lh = 22;
-    let ly = y + lh + 8;
-    while (ly < y + h - 8) {
-      ctx.fillRect(x + pad, ly, w - pad * 2, 0.8);
-      ly += lh;
-    }
-  }
-
-  // Label badge
+  // Badge
   ctx.fillStyle = cfg.colors.grid;
-  ctx.font = `500 9px 'IBM Plex Mono', monospace`;
-  ctx.fillText('POLECENIE', x + 10, y + 10);
+  ctx.font = `500 8px 'DM Sans', sans-serif`;
+  ctx.fillText('POLECENIE', x + 14, y + 11);
+
+  // Placeholder ruled lines
+  ctx.strokeStyle = cfg.colors.grid;
+  ctx.lineWidth = 0.5;
+  const pad = 14, lh = Math.max(18, h / 5);
+  let ly = y + lh + 6;
+  while (ly < y + h - 6) {
+    ctx.beginPath(); ctx.moveTo(x + pad, ly); ctx.lineTo(x + w - pad, ly); ctx.stroke();
+    ly += lh;
+  }
 }
 
-// Grid (układ współrzędnych) section
-function drawGridSection(ctx, x, y, w, h, cfg) {
+// ── Grid section (canvas) ─────────────────────────────────────────────────────
+function drawGrid_ctx(ctx, x, y, w, h, cfg) {
   ctx.fillStyle = cfg.colors.gridBg;
   ctx.fillRect(x, y, w, h);
 
   const step = parseFraction(cfg.step);
-  const xMin = cfg.xMin, xMax = cfg.xMax;
-  const yMin = cfg.yMin, yMax = cfg.yMax;
+  const { xMin, xMax, yMin, yMax } = cfg;
+  const mg = computeMargins(cfg);
 
-  const rangeX = xMax - xMin;
-  const rangeY = yMax - yMin;
+  const innerX = x + mg.left;
+  const innerY = y + mg.top;
+  const innerW = w - mg.left - mg.right;
+  const innerH = h - mg.top  - mg.bottom;
+  if (innerW <= 0 || innerH <= 0) return;
 
-  const pad = 36; // space for labels
-  const innerW = w - pad * 2;
-  const innerH = h - pad * 2;
+  const sx = innerW / (xMax - xMin);
+  const sy = innerH / (yMax - yMin);
+  const ox = innerX + (-xMin) * sx;
+  const oy = innerY + (yMax)  * sy;
 
-  const scaleX = innerW / rangeX;
-  const scaleY = innerH / rangeY;
-
-  const originX = x + pad + (-xMin) * scaleX;
-  const originY = y + pad + (yMax) * scaleY;
+  // Clip to inner area
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(innerX, innerY, innerW, innerH);
+  ctx.clip();
 
   // Grid lines
   ctx.strokeStyle = cfg.colors.grid;
   ctx.lineWidth = cfg.gridLineW;
 
-  // Vertical grid
-  let gx = Math.ceil(xMin / step) * step;
-  while (gx <= xMax + 0.001) {
-    const px = x + pad + (gx - xMin) * scaleX;
-    ctx.beginPath(); ctx.moveTo(px, y + pad); ctx.lineTo(px, y + pad + innerH); ctx.stroke();
-    gx = Math.round((gx + step) * 10000) / 10000;
+  for (let gx = snapUp(xMin, step); gx <= xMax + 1e-4; gx = round4(gx + step)) {
+    const px = innerX + (gx - xMin) * sx;
+    ctx.beginPath(); ctx.moveTo(px, innerY); ctx.lineTo(px, innerY + innerH); ctx.stroke();
   }
-
-  // Horizontal grid
-  let gy = Math.ceil(yMin / step) * step;
-  while (gy <= yMax + 0.001) {
-    const py = y + pad + (yMax - gy) * scaleY;
-    ctx.beginPath(); ctx.moveTo(x + pad, py); ctx.lineTo(x + pad + innerW, py); ctx.stroke();
-    gy = Math.round((gy + step) * 10000) / 10000;
+  for (let gy = snapUp(yMin, step); gy <= yMax + 1e-4; gy = round4(gy + step)) {
+    const py = innerY + (yMax - gy) * sy;
+    ctx.beginPath(); ctx.moveTo(innerX, py); ctx.lineTo(innerX + innerW, py); ctx.stroke();
   }
 
   // Axes
   ctx.strokeStyle = cfg.colors.axes;
-  ctx.lineWidth = cfg.boldAxes ? cfg.axisLineW : cfg.gridLineW * 1.5;
+  ctx.lineWidth = cfg.boldAxes ? cfg.axisLineW : cfg.gridLineW * 1.6;
 
-  // X axis
-  if (originY >= y + pad && originY <= y + pad + innerH) {
-    ctx.beginPath(); ctx.moveTo(x + pad, originY); ctx.lineTo(x + pad + innerW, originY); ctx.stroke();
+  if (oy >= innerY && oy <= innerY + innerH) {
+    ctx.beginPath(); ctx.moveTo(innerX, oy); ctx.lineTo(innerX + innerW, oy); ctx.stroke();
   }
-  // Y axis
-  if (originX >= x + pad && originX <= x + pad + innerW) {
-    ctx.beginPath(); ctx.moveTo(originX, y + pad); ctx.lineTo(originX, y + pad + innerH); ctx.stroke();
+  if (ox >= innerX && ox <= innerX + innerW) {
+    ctx.beginPath(); ctx.moveTo(ox, innerY); ctx.lineTo(ox, innerY + innerH); ctx.stroke();
   }
 
   // Arrows
   if (cfg.showArrows) {
-    const arr = 7;
+    const a = 7;
     ctx.strokeStyle = cfg.colors.axes;
     ctx.lineWidth = cfg.axisLineW;
-    // X arrow (right)
-    const axEnd = x + pad + innerW;
-    if (originY >= y + pad && originY <= y + pad + innerH) {
-      ctx.beginPath(); ctx.moveTo(axEnd, originY); ctx.lineTo(axEnd - arr, originY - 4); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(axEnd, originY); ctx.lineTo(axEnd - arr, originY + 4); ctx.stroke();
+    const xr = innerX + innerW, yt = innerY;
+    if (inRange(oy, innerY, innerY + innerH)) {
+      ctx.beginPath(); ctx.moveTo(xr, oy); ctx.lineTo(xr - a, oy - 4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(xr, oy); ctx.lineTo(xr - a, oy + 4); ctx.stroke();
     }
-    // Y arrow (top)
-    const ayEnd = y + pad;
-    if (originX >= x + pad && originX <= x + pad + innerW) {
-      ctx.beginPath(); ctx.moveTo(originX, ayEnd); ctx.lineTo(originX - 4, ayEnd + arr); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(originX, ayEnd); ctx.lineTo(originX + 4, ayEnd + arr); ctx.stroke();
+    if (inRange(ox, innerX, innerX + innerW)) {
+      ctx.beginPath(); ctx.moveTo(ox, yt); ctx.lineTo(ox - 4, yt + a); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ox, yt); ctx.lineTo(ox + 4, yt + a); ctx.stroke();
     }
   }
 
-  // Axis letters
+  ctx.restore();
+
+  // Axis name labels outside clip
   if (cfg.showAxisLabels) {
     ctx.fillStyle = cfg.colors.axes;
-    ctx.font = `600 ${cfg.labelFontSize + 2}px 'IBM Plex Sans', sans-serif`;
-    if (originY >= y + pad && originY <= y + pad + innerH)
-      ctx.fillText('x', x + pad + innerW + 6, originY + 4);
-    if (originX >= x + pad && originX <= x + pad + innerW)
-      ctx.fillText('y', originX + 5, y + pad - 6);
+    ctx.font = `600 ${cfg.labelFontSize + 2}px 'Lora', serif`;
+    if (inRange(oy, innerY, innerY + innerH))
+      ctx.fillText('x', innerX + innerW + 6, oy + 4);
+    if (inRange(ox, innerX, innerX + innerW))
+      ctx.fillText('y', ox + 5, innerY - 5);
   }
 
   // Tick labels
   if (cfg.labelType !== 'none') {
     ctx.fillStyle = cfg.colors.axes;
-    ctx.font = `${cfg.labelFontSize}px 'IBM Plex Mono', monospace`;
+    ctx.font = `${cfg.labelFontSize}px 'DM Sans', sans-serif`;
     ctx.textAlign = 'center';
 
-    // X axis ticks
-    let lx = Math.ceil(xMin / step) * step;
-    while (lx <= xMax + 0.001) {
-      if (Math.abs(lx) > 0.0001) {
-        const px = x + pad + (lx - xMin) * scaleX;
-        const label = formatLabel(lx, cfg.labelType);
-        if (label) {
-          ctx.fillText(label, px, originY + cfg.labelFontSize + 4);
-          ctx.strokeStyle = cfg.colors.axes; ctx.lineWidth = 0.8;
-          ctx.beginPath(); ctx.moveTo(px, originY - 3); ctx.lineTo(px, originY + 3); ctx.stroke();
-        }
-      }
-      lx = Math.round((lx + step) * 10000) / 10000;
+    for (let lx = snapUp(xMin, step); lx <= xMax + 1e-4; lx = round4(lx + step)) {
+      if (Math.abs(lx) < 1e-9) continue;
+      const px = innerX + (lx - xMin) * sx;
+      if (!inRange(px, innerX, innerX + innerW)) continue;
+      const label = niceLabel(lx, cfg.labelType);
+      if (!label) continue;
+      const lyPos = clamp(oy, innerY, innerY + innerH);
+      ctx.fillText(label, px, lyPos + cfg.labelFontSize + 3);
+      ctx.strokeStyle = cfg.colors.axes; ctx.lineWidth = 0.7;
+      ctx.beginPath(); ctx.moveTo(px, lyPos - 3); ctx.lineTo(px, lyPos + 3); ctx.stroke();
     }
 
-    // Y axis ticks
     ctx.textAlign = 'right';
-    let ly = Math.ceil(yMin / step) * step;
-    while (ly <= yMax + 0.001) {
-      if (Math.abs(ly) > 0.0001) {
-        const py = y + pad + (yMax - ly) * scaleY;
-        const label = formatLabel(ly, cfg.labelType);
-        if (label) {
-          ctx.fillText(label, originX - 5, py + 3);
-          ctx.strokeStyle = cfg.colors.axes; ctx.lineWidth = 0.8;
-          ctx.beginPath(); ctx.moveTo(originX - 3, py); ctx.lineTo(originX + 3, py); ctx.stroke();
-        }
-      }
-      ly = Math.round((ly + step) * 10000) / 10000;
+    for (let ly = snapUp(yMin, step); ly <= yMax + 1e-4; ly = round4(ly + step)) {
+      if (Math.abs(ly) < 1e-9) continue;
+      const py = innerY + (yMax - ly) * sy;
+      if (!inRange(py, innerY, innerY + innerH)) continue;
+      const label = niceLabel(ly, cfg.labelType);
+      if (!label) continue;
+      const lxPos = clamp(ox, innerX, innerX + innerW);
+      ctx.fillText(label, lxPos - 4, py + 3);
+      ctx.strokeStyle = cfg.colors.axes; ctx.lineWidth = 0.7;
+      ctx.beginPath(); ctx.moveTo(lxPos - 3, py); ctx.lineTo(lxPos + 3, py); ctx.stroke();
     }
     ctx.textAlign = 'left';
   }
 
-  // Border
+  // Inner border
   ctx.strokeStyle = cfg.colors.grid;
   ctx.lineWidth = 0.5;
-  ctx.strokeRect(x + pad, y + pad, innerW, innerH);
+  ctx.strokeRect(innerX, innerY, innerW, innerH);
 }
 
-// Work (obliczenia) section — clean blank space
-function drawWorkSection(ctx, x, y, w, h, cfg) {
+// ── Work section (canvas) ─────────────────────────────────────────────────────
+function drawWork_ctx(ctx, x, y, w, h, cfg) {
   ctx.fillStyle = cfg.colors.workBg;
   ctx.fillRect(x, y, w, h);
 
+  // Top line
   ctx.strokeStyle = cfg.colors.grid;
   ctx.lineWidth = 0.8;
   ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.stroke();
 
-  // Label
+  // Badge
   ctx.fillStyle = cfg.colors.grid;
-  ctx.font = `500 9px 'IBM Plex Mono', monospace`;
-  ctx.fillText('OBLICZENIA', x + 10, y + 10);
+  ctx.font = `500 8px 'DM Sans', sans-serif`;
+  ctx.fillText('OBLICZENIA', x + 14, y + 11);
 }
 
 // ── jsPDF export ──────────────────────────────────────────────────────────────
@@ -294,7 +263,6 @@ function drawWorkSection(ctx, x, y, w, h, cfg) {
 function generatePDF(cfg) {
   const { jsPDF } = window.jspdf;
   const W = cfg.pageW, H = cfg.pageH;
-
   const doc = new jsPDF({
     orientation: W >= H ? 'landscape' : 'portrait',
     unit: 'pt',
@@ -302,115 +270,97 @@ function generatePDF(cfg) {
   });
 
   const layout = buildLayout(cfg);
-
   for (const seg of layout) {
-    if (seg.id === 'task') pdfTaskSection(doc, 0, seg.y, W, seg.h, cfg);
-    if (seg.id === 'grid') pdfGridSection(doc, 0, seg.y, W, seg.h, cfg);
-    if (seg.id === 'work') pdfWorkSection(doc, 0, seg.y, W, seg.h, cfg);
+    switch (seg.id) {
+      case 'task': pdfTask(doc, 0, seg.y, W, seg.h, cfg); break;
+      case 'grid': pdfGrid(doc, 0, seg.y, W, seg.h, cfg); break;
+      case 'work': pdfWork(doc, 0, seg.y, W, seg.h, cfg); break;
+    }
   }
-
-  // Outer border
-  doc.setDrawColor(200, 200, 200);
+  doc.setDrawColor(200, 194, 186);
   doc.setLineWidth(0.5);
   doc.rect(0, 0, W, H, 'S');
-
   return doc;
 }
 
-function pdfTaskSection(doc, x, y, w, h, cfg) {
-  const bg = hexToRgb(cfg.colors.taskBg);
-  doc.setFillColor(...bg);
+function pdfTask(doc, x, y, w, h, cfg) {
+  doc.setFillColor(...hexToRgb(cfg.colors.taskBg));
   doc.rect(x, y, w, h, 'F');
 
   doc.setDrawColor(...hexToRgb(cfg.colors.grid));
   doc.setLineWidth(0.8);
   doc.line(x, y + h, x + w, y + h);
 
-  // Badge
   doc.setFont('Helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(...hexToRgb(cfg.colors.grid));
-  doc.text('POLECENIE', x + 10, y + 9);
+  doc.text('POLECENIE', x + 14, y + 10);
 
-  // Task text
-  if (cfg.taskText) {
-    doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(cfg.taskFontSize);
-    doc.setTextColor(...hexToRgb(cfg.colors.taskText));
-    const pad = 16;
-    const lines = doc.splitTextToSize(cfg.taskText, w - pad * 2);
-    doc.text(lines, x + pad, y + pad + cfg.taskFontSize, { maxHeight: h - pad * 2 });
-  } else {
-    // placeholder lines
-    doc.setDrawColor(...hexToRgb(cfg.colors.grid));
-    doc.setLineWidth(0.5);
-    const pad = 16, lh = 22;
-    let ly = y + lh + 8;
-    while (ly < y + h - 8) {
-      doc.line(x + pad, ly, x + w - pad, ly);
-      ly += lh;
-    }
+  // Ruled lines
+  doc.setLineWidth(0.4);
+  const pad = 14, lh = Math.max(18, h / 5);
+  let ly = y + lh + 6;
+  while (ly < y + h - 6) {
+    doc.line(x + pad, ly, x + w - pad, ly);
+    ly += lh;
   }
 }
 
-function pdfGridSection(doc, x, y, w, h, cfg) {
-  const bg = hexToRgb(cfg.colors.gridBg);
-  doc.setFillColor(...bg);
+function pdfGrid(doc, x, y, w, h, cfg) {
+  doc.setFillColor(...hexToRgb(cfg.colors.gridBg));
   doc.rect(x, y, w, h, 'F');
 
   const step = parseFraction(cfg.step);
-  const xMin = cfg.xMin, xMax = cfg.xMax;
-  const yMin = cfg.yMin, yMax = cfg.yMax;
-  const rangeX = xMax - xMin;
-  const rangeY = yMax - yMin;
+  const { xMin, xMax, yMin, yMax } = cfg;
+  const mg = computeMargins(cfg);
 
-  const pad = 36;
-  const innerW = w - pad * 2;
-  const innerH = h - pad * 2;
-  const scaleX = innerW / rangeX;
-  const scaleY = innerH / rangeY;
-  const originX = x + pad + (-xMin) * scaleX;
-  const originY = y + pad + (yMax) * scaleY;
+  const innerX = x + mg.left;
+  const innerY = y + mg.top;
+  const innerW = w - mg.left - mg.right;
+  const innerH = h - mg.top  - mg.bottom;
+  if (innerW <= 0 || innerH <= 0) return;
 
-  // Grid
+  const sx = innerW / (xMax - xMin);
+  const sy = innerH / (yMax - yMin);
+  const ox = innerX + (-xMin) * sx;
+  const oy = innerY + (yMax)  * sy;
+
+  // Grid lines
   doc.setDrawColor(...hexToRgb(cfg.colors.grid));
   doc.setLineWidth(cfg.gridLineW);
 
-  let gx = Math.ceil(xMin / step) * step;
-  while (gx <= xMax + 0.001) {
-    const px = x + pad + (gx - xMin) * scaleX;
-    doc.line(px, y + pad, px, y + pad + innerH);
-    gx = Math.round((gx + step) * 10000) / 10000;
+  for (let gx = snapUp(xMin, step); gx <= xMax + 1e-4; gx = round4(gx + step)) {
+    const px = innerX + (gx - xMin) * sx;
+    if (inRange(px, innerX, innerX + innerW))
+      doc.line(px, innerY, px, innerY + innerH);
   }
-  let gy = Math.ceil(yMin / step) * step;
-  while (gy <= yMax + 0.001) {
-    const py = y + pad + (yMax - gy) * scaleY;
-    doc.line(x + pad, py, x + pad + innerW, py);
-    gy = Math.round((gy + step) * 10000) / 10000;
+  for (let gy = snapUp(yMin, step); gy <= yMax + 1e-4; gy = round4(gy + step)) {
+    const py = innerY + (yMax - gy) * sy;
+    if (inRange(py, innerY, innerY + innerH))
+      doc.line(innerX, py, innerX + innerW, py);
   }
 
   // Axes
   doc.setDrawColor(...hexToRgb(cfg.colors.axes));
   doc.setLineWidth(cfg.boldAxes ? cfg.axisLineW : cfg.gridLineW * 1.8);
 
-  if (originY >= y + pad && originY <= y + pad + innerH)
-    doc.line(x + pad, originY, x + pad + innerW, originY);
-  if (originX >= x + pad && originX <= x + pad + innerW)
-    doc.line(originX, y + pad, originX, y + pad + innerH);
+  if (inRange(oy, innerY, innerY + innerH))
+    doc.line(innerX, oy, innerX + innerW, oy);
+  if (inRange(ox, innerX, innerX + innerW))
+    doc.line(ox, innerY, ox, innerY + innerH);
 
   // Arrows
   if (cfg.showArrows) {
-    const arr = 7;
+    const a = 7;
     doc.setLineWidth(cfg.axisLineW);
-    const axEnd = x + pad + innerW;
-    if (originY >= y + pad && originY <= y + pad + innerH) {
-      doc.line(axEnd, originY, axEnd - arr, originY - 4);
-      doc.line(axEnd, originY, axEnd - arr, originY + 4);
+    const xr = innerX + innerW, yt = innerY;
+    if (inRange(oy, innerY, innerY + innerH)) {
+      doc.line(xr, oy, xr - a, oy - 4);
+      doc.line(xr, oy, xr - a, oy + 4);
     }
-    const ayEnd = y + pad;
-    if (originX >= x + pad && originX <= x + pad + innerW) {
-      doc.line(originX, ayEnd, originX - 4, ayEnd + arr);
-      doc.line(originX, ayEnd, originX + 4, ayEnd + arr);
+    if (inRange(ox, innerX, innerX + innerW)) {
+      doc.line(ox, yt, ox - 4, yt + a);
+      doc.line(ox, yt, ox + 4, yt + a);
     }
   }
 
@@ -419,10 +369,10 @@ function pdfGridSection(doc, x, y, w, h, cfg) {
     doc.setFont('Helvetica', 'bold');
     doc.setFontSize(cfg.labelFontSize + 2);
     doc.setTextColor(...hexToRgb(cfg.colors.axes));
-    if (originY >= y + pad && originY <= y + pad + innerH)
-      doc.text('x', x + pad + innerW + 5, originY + 4);
-    if (originX >= x + pad && originX <= x + pad + innerW)
-      doc.text('y', originX + 4, y + pad - 5);
+    if (inRange(oy, innerY, innerY + innerH))
+      doc.text('x', innerX + innerW + 5, oy + 4);
+    if (inRange(ox, innerX, innerX + innerW))
+      doc.text('y', ox + 4, innerY - 4);
   }
 
   // Tick labels
@@ -431,51 +381,39 @@ function pdfGridSection(doc, x, y, w, h, cfg) {
     doc.setFontSize(cfg.labelFontSize);
     doc.setTextColor(...hexToRgb(cfg.colors.axes));
 
-    let lx = Math.ceil(xMin / step) * step;
-    while (lx <= xMax + 0.001) {
-      if (Math.abs(lx) > 0.0001) {
-        const px = x + pad + (lx - xMin) * scaleX;
-        const label = formatLabel(lx, cfg.labelType);
-        if (label && originY >= y + pad && originY <= y + pad + innerH) {
-          doc.text(label, px, originY + cfg.labelFontSize + 3, { align: 'center' });
-          doc.setDrawColor(...hexToRgb(cfg.colors.axes));
-          doc.setLineWidth(0.6);
-          doc.line(px, originY - 3, px, originY + 3);
-        }
-      }
-      lx = Math.round((lx + step) * 10000) / 10000;
+    for (let lx = snapUp(xMin, step); lx <= xMax + 1e-4; lx = round4(lx + step)) {
+      if (Math.abs(lx) < 1e-9) continue;
+      const px = innerX + (lx - xMin) * sx;
+      if (!inRange(px, innerX, innerX + innerW)) continue;
+      const label = niceLabel(lx, cfg.labelType);
+      if (!label) continue;
+      const lyPos = clamp(oy, innerY, innerY + innerH);
+      doc.text(label, px, lyPos + cfg.labelFontSize + 2, { align: 'center' });
+      doc.setLineWidth(0.6);
+      doc.line(px, lyPos - 3, px, lyPos + 3);
     }
 
-    let ly = Math.ceil(yMin / step) * step;
-    while (ly <= yMax + 0.001) {
-      if (Math.abs(ly) > 0.0001) {
-        const py = y + pad + (yMax - ly) * scaleY;
-        const label = formatLabel(ly, cfg.labelType);
-        if (label && originX >= x + pad && originX <= x + pad + innerW) {
-          doc.text(label, originX - 4, py + 3, { align: 'right' });
-          doc.setDrawColor(...hexToRgb(cfg.colors.axes));
-          doc.setLineWidth(0.6);
-          doc.line(originX - 3, py, originX + 3, py);
-        }
-      }
-      ly = Math.round((ly + step) * 10000) / 10000;
+    for (let ly = snapUp(yMin, step); ly <= yMax + 1e-4; ly = round4(ly + step)) {
+      if (Math.abs(ly) < 1e-9) continue;
+      const py = innerY + (yMax - ly) * sy;
+      if (!inRange(py, innerY, innerY + innerH)) continue;
+      const label = niceLabel(ly, cfg.labelType);
+      if (!label) continue;
+      const lxPos = clamp(ox, innerX, innerX + innerW);
+      doc.text(label, lxPos - 3, py + 3, { align: 'right' });
+      doc.setLineWidth(0.6);
+      doc.line(lxPos - 3, py, lxPos + 3, py);
     }
   }
 
   // Inner border
   doc.setDrawColor(...hexToRgb(cfg.colors.grid));
   doc.setLineWidth(0.5);
-  doc.rect(x + pad, y + pad, innerW, innerH, 'S');
-
-  // Badge
-  doc.setFont('Helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.text('UKŁAD WSPÓŁRZĘDNYCH', x + pad + 4, y + pad + 8);
+  doc.rect(innerX, innerY, innerW, innerH, 'S');
 }
 
-function pdfWorkSection(doc, x, y, w, h, cfg) {
-  const bg = hexToRgb(cfg.colors.workBg);
-  doc.setFillColor(...bg);
+function pdfWork(doc, x, y, w, h, cfg) {
+  doc.setFillColor(...hexToRgb(cfg.colors.workBg));
   doc.rect(x, y, w, h, 'F');
 
   doc.setDrawColor(...hexToRgb(cfg.colors.grid));
@@ -485,7 +423,36 @@ function pdfWorkSection(doc, x, y, w, h, cfg) {
   doc.setFont('Helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(...hexToRgb(cfg.colors.grid));
-  doc.text('OBLICZENIA', x + 10, y + 9);
+  doc.text('OBLICZENIA', x + 14, y + 10);
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+
+function computeMargins(cfg) {
+  const m = cfg.gridMargin || {};
+  const def = Math.max(24, cfg.labelFontSize * 3.2);
+  return {
+    top:    m.top    != null ? Number(m.top)    : def,
+    right:  m.right  != null ? Number(m.right)  : def,
+    bottom: m.bottom != null ? Number(m.bottom) : def,
+    left:   m.left   != null ? Number(m.left)   : def,
+  };
+}
+
+function snapUp(min, step) {
+  return Math.ceil(min / step) * step;
+}
+
+function round4(v) {
+  return Math.round(v * 10000) / 10000;
+}
+
+function inRange(v, lo, hi) {
+  return v >= lo - 0.1 && v <= hi + 0.1;
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
 }
 
 window.NoteGridPDF = { renderToCanvas, generatePDF };

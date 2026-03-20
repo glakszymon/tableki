@@ -3,231 +3,236 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>NoteGrid — Geometria Analityczna</title>
+  <title>NoteGrid</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 </head>
 <body>
-  <div id="app">
+<div id="app">
 
-    <!-- TOP BAR -->
-    <header class="topbar">
-      <div class="topbar-brand">
-        <span class="brand-mark">NG</span>
-        <div>
-          <div class="brand-name">NoteGrid</div>
-          <div class="brand-sub">generator arkuszy · geometria analityczna</div>
-        </div>
-      </div>
-      <div class="topbar-actions">
-        <button class="btn-ghost" @click="resetDefaults">↺ Reset</button>
-        <button class="btn-primary" :class="{ loading: isGenerating }" @click="generate">
-          <span v-if="!isGenerating">Generuj PDF</span>
-          <span v-else class="spinner-wrap"><span class="spinner"></span></span>
-        </button>
-        <button class="btn-download" :disabled="!pdfReady" @click="download">↓ Pobierz</button>
-      </div>
-    </header>
+  <!-- ═══ SIDEBAR ════════════════════════════════════════════════ -->
+  <aside class="sidebar">
 
-    <!-- MAIN LAYOUT -->
-    <div class="workspace">
-
-      <!-- LEFT: SETTINGS -->
-      <aside class="panel">
-        <div class="panel-scroll">
-
-          <!-- PAGE SIZE -->
-          <section class="card">
-            <div class="card-head">
-              <span class="card-icon">📐</span>
-              <span>Rozmiar arkusza</span>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label>Szerokość (pt)</label>
-                <input type="number" v-model.number="cfg.pageW" min="400" max="5000" step="10" @input="schedulePreview" />
-              </div>
-              <div class="field">
-                <label>Wysokość (pt)</label>
-                <input type="number" v-model.number="cfg.pageH" min="400" max="5000" step="10" @input="schedulePreview" />
-              </div>
-            </div>
-            <div class="preset-pills">
-              <button v-for="p in presets" :key="p.label"
-                class="pill" :class="{active: activePreset===p.label}"
-                @click="applyPreset(p)">{{ p.label }}</button>
-            </div>
-          </section>
-
-          <!-- LAYOUT SECTIONS -->
-          <section class="card">
-            <div class="card-head">
-              <span class="card-icon">⬛</span>
-              <span>Sekcje arkusza</span>
-            </div>
-            <p class="card-hint">Proporcje sekcji (suma powinna wynosić 100%)</p>
-
-            <div class="section-builder">
-              <div class="sb-row" v-for="sec in cfg.sections" :key="sec.id">
-                <div class="sb-meta">
-                  <label class="toggle-wrap">
-                    <input type="checkbox" v-model="sec.enabled" @change="schedulePreview" />
-                    <span class="toggle-track"></span>
-                  </label>
-                  <span class="sb-icon">{{ sec.icon }}</span>
-                  <span class="sb-name">{{ sec.name }}</span>
-                </div>
-                <div class="sb-slider-wrap" :class="{disabled: !sec.enabled}">
-                  <input type="range" v-model.number="sec.pct" min="5" max="85" step="1"
-                    :disabled="!sec.enabled" @input="schedulePreview" />
-                  <span class="sb-pct">{{ sec.enabled ? sec.pct : '—' }}%</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="pct-bar">
-              <div v-for="sec in cfg.sections" :key="sec.id"
-                class="pct-seg" :class="`seg-${sec.id}`"
-                :style="{width: (sec.enabled ? sec.pct : 0) + '%'}"
-                :title="sec.name + ': ' + sec.pct + '%'">
-              </div>
-            </div>
-            <div class="pct-sum" :class="{over: pctSum !== 100}">
-              Suma: <strong>{{ pctSum }}%</strong>
-              <button class="btn-micro" @click="normalizePct">Auto-wyrównaj</button>
-            </div>
-          </section>
-
-          <!-- GRID CONFIG -->
-          <section class="card">
-            <div class="card-head">
-              <span class="card-icon">#</span>
-              <span>Układ współrzędnych</span>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label>X min</label>
-                <input type="number" v-model.number="cfg.xMin" @input="schedulePreview" />
-              </div>
-              <div class="field">
-                <label>X max</label>
-                <input type="number" v-model.number="cfg.xMax" @input="schedulePreview" />
-              </div>
-              <div class="field">
-                <label>Y min</label>
-                <input type="number" v-model.number="cfg.yMin" @input="schedulePreview" />
-              </div>
-              <div class="field">
-                <label>Y max</label>
-                <input type="number" v-model.number="cfg.yMax" @input="schedulePreview" />
-              </div>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label>Krok siatki</label>
-                <input type="text" v-model="cfg.step" placeholder="np. 1, 0.5, 1/2" @input="schedulePreview" />
-              </div>
-              <div class="field">
-                <label>Zapis etykiet</label>
-                <select v-model="cfg.labelType" @change="schedulePreview">
-                  <option value="fraction">Ułamkowy</option>
-                  <option value="decimal">Dziesiętny</option>
-                  <option value="none">Brak</option>
-                </select>
-              </div>
-            </div>
-            <div class="toggle-row">
-              <span>Etykiety osi (x, y)</span>
-              <label class="toggle-wrap">
-                <input type="checkbox" v-model="cfg.showAxisLabels" @change="schedulePreview" />
-                <span class="toggle-track"></span>
-              </label>
-            </div>
-            <div class="toggle-row">
-              <span>Strzałki na osiach</span>
-              <label class="toggle-wrap">
-                <input type="checkbox" v-model="cfg.showArrows" @change="schedulePreview" />
-                <span class="toggle-track"></span>
-              </label>
-            </div>
-            <div class="toggle-row">
-              <span>Grube osie główne</span>
-              <label class="toggle-wrap">
-                <input type="checkbox" v-model="cfg.boldAxes" @change="schedulePreview" />
-                <span class="toggle-track"></span>
-              </label>
-            </div>
-          </section>
-
-          <!-- VISUAL -->
-          <section class="card">
-            <div class="card-head">
-              <span class="card-icon">🎨</span>
-              <span>Wygląd</span>
-            </div>
-            <div class="color-grid">
-              <div class="color-row" v-for="col in colorFields" :key="col.key">
-                <label>{{ col.label }}</label>
-                <div class="color-pair">
-                  <div class="swatch"><input type="color" v-model="cfg.colors[col.key]" @input="schedulePreview" /></div>
-                  <input type="text" class="hex-input" v-model="cfg.colors[col.key]" @change="schedulePreview" maxlength="7" />
-                </div>
-              </div>
-            </div>
-            <div class="field-row" style="margin-top:12px">
-              <div class="field">
-                <label>Grubość siatki</label>
-                <input type="number" v-model.number="cfg.gridLineW" min="0.1" max="3" step="0.1" @input="schedulePreview" />
-              </div>
-              <div class="field">
-                <label>Grubość osi</label>
-                <input type="number" v-model.number="cfg.axisLineW" min="0.5" max="5" step="0.1" @input="schedulePreview" />
-              </div>
-            </div>
-          </section>
-
-          <!-- CONTENT -->
-          <section class="card">
-            <div class="card-head">
-              <span class="card-icon">✏️</span>
-              <span>Treść polecenia</span>
-            </div>
-            <textarea class="task-input" v-model="cfg.taskText" rows="4"
-              placeholder="Wpisz treść zadania, które pojawi się w górnej sekcji…"
-              @input="schedulePreview"></textarea>
-            <div class="field-row" style="margin-top:10px">
-              <div class="field">
-                <label>Czcionka polecenia</label>
-                <input type="number" v-model.number="cfg.taskFontSize" min="6" max="36" @input="schedulePreview" />
-              </div>
-              <div class="field">
-                <label>Czcionka etykiet osi</label>
-                <input type="number" v-model.number="cfg.labelFontSize" min="4" max="24" @input="schedulePreview" />
-              </div>
-            </div>
-          </section>
-
-        </div>
-      </aside>
-
-      <!-- RIGHT: LIVE PREVIEW -->
-      <main class="preview-area">
-        <div class="preview-header">
-          <span class="preview-tag">Podgląd na żywo</span>
-          <span class="preview-dims">{{ cfg.pageW }} × {{ cfg.pageH }} pt</span>
-        </div>
-        <div class="preview-wrap" ref="previewWrap">
-          <canvas ref="canvas" class="preview-canvas"></canvas>
-        </div>
-      </main>
-
+    <div class="brand">
+      <svg class="brand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <rect x="1.5" y="1.5" width="17" height="17" rx="3.5" stroke="currentColor" stroke-width="1.3"/>
+        <line x1="10" y1="3" x2="10" y2="17" stroke="currentColor" stroke-width="1.1"/>
+        <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" stroke-width="1.1"/>
+        <line x1="10" y1="3" x2="9" y2="5.2" stroke="currentColor" stroke-width="1"/>
+        <line x1="10" y1="3" x2="11" y2="5.2" stroke="currentColor" stroke-width="1"/>
+        <line x1="17" y1="10" x2="14.8" y2="9" stroke="currentColor" stroke-width="1"/>
+        <line x1="17" y1="10" x2="14.8" y2="11" stroke="currentColor" stroke-width="1"/>
+      </svg>
+      <span>NoteGrid</span>
     </div>
-  </div>
 
-  <script src="pdf.js"></script>
-  <script src="app.js"></script>
+    <div class="sidebar-body">
+
+      <!-- FORMAT KARTKI -->
+      <section class="block">
+        <h3 class="block-title">Format kartki</h3>
+
+        <div class="format-grid">
+          <button v-for="p in presets" :key="p.id"
+            class="fmt-card" :class="{ active: activePreset === p.id }"
+            @click="applyPreset(p)">
+            <div class="fmt-thumb-wrap">
+              <div class="fmt-thumb" :style="thumbStyle(p)"></div>
+            </div>
+            <div class="fmt-name">{{ p.label }}</div>
+            <div class="fmt-size">{{ p.w }}&thinsp;×&thinsp;{{ p.h }}</div>
+          </button>
+        </div>
+
+        <button class="rotate-btn" @click="rotateFormat">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M1.5 6.5A5 5 0 1 0 6.5 1.5V0L4 2l2.5 2V2.5a4 4 0 1 1-4 4H1.5z" fill="currentColor"/>
+          </svg>
+          Obróć format
+        </button>
+
+        <div class="custom-dims">
+          <div class="field-xs">
+            <label>Szerokość</label>
+            <input type="number" v-model.number="cfg.pageW" min="200" max="6000" @input="onCustomSize" />
+          </div>
+          <div class="dims-sep">×</div>
+          <div class="field-xs">
+            <label>Wysokość</label>
+            <input type="number" v-model.number="cfg.pageH" min="200" max="6000" @input="onCustomSize" />
+          </div>
+          <span class="dims-unit">pt</span>
+        </div>
+      </section>
+
+      <!-- SEKCJE -->
+      <section class="block">
+        <h3 class="block-title">Sekcje arkusza</h3>
+
+        <div class="sec-list">
+          <div class="sec-row" v-for="s in cfg.sections" :key="s.id">
+            <label class="sec-check">
+              <input type="checkbox" v-model="s.enabled" @change="schedulePreview" />
+              <span class="sec-box"></span>
+            </label>
+            <span class="sec-lbl" :class="{ muted: !s.enabled }">{{ s.name }}</span>
+            <div class="sec-track" :class="{ muted: !s.enabled }">
+              <div class="sec-fill" :style="{ width: (s.enabled ? s.pct : 0) + '%' }"></div>
+              <input type="range" v-model.number="s.pct" min="5" max="90" step="1"
+                :disabled="!s.enabled" @input="schedulePreview" />
+            </div>
+            <span class="sec-val" :class="{ muted: !s.enabled }">{{ s.enabled ? s.pct : 0 }}%</span>
+          </div>
+        </div>
+
+        <div class="pct-status" :class="{ bad: pctSum !== 100 }">
+          Suma {{ pctSum }}%
+          <button class="micro-btn" @click="normalizePct">auto</button>
+        </div>
+      </section>
+
+      <!-- SIATKA -->
+      <section class="block">
+        <h3 class="block-title">Układ współrzędnych</h3>
+
+        <div class="four-grid">
+          <div class="field-xs">
+            <label>X min</label>
+            <input type="number" v-model.number="cfg.xMin" @input="schedulePreview" />
+          </div>
+          <div class="field-xs">
+            <label>X max</label>
+            <input type="number" v-model.number="cfg.xMax" @input="schedulePreview" />
+          </div>
+          <div class="field-xs">
+            <label>Y min</label>
+            <input type="number" v-model.number="cfg.yMin" @input="schedulePreview" />
+          </div>
+          <div class="field-xs">
+            <label>Y max</label>
+            <input type="number" v-model.number="cfg.yMax" @input="schedulePreview" />
+          </div>
+        </div>
+
+        <div class="two-grid" style="margin-top:8px">
+          <div class="field-xs">
+            <label>Krok</label>
+            <input type="text" v-model="cfg.step" placeholder="1, 0.5, 1/2" @input="schedulePreview" />
+          </div>
+          <div class="field-xs">
+            <label>Etykiety</label>
+            <select v-model="cfg.labelType" @change="schedulePreview">
+              <option value="fraction">Ułamkowe</option>
+              <option value="decimal">Dziesiętne</option>
+              <option value="none">Brak</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sw-list">
+          <div class="sw-row" v-for="t in axisToggles" :key="t.key">
+            <span>{{ t.label }}</span>
+            <label class="sw">
+              <input type="checkbox" v-model="cfg[t.key]" @change="schedulePreview" />
+              <span class="sw-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Marginesy siatki -->
+        <div class="margin-block">
+          <div class="margin-label">Marginesy układu (pt)</div>
+          <div class="margin-cross">
+            <div class="margin-top">
+              <div class="field-xs">
+                <label>Góra</label>
+                <input type="number" v-model.number="cfg.gridMargin.top" min="0" max="200" @input="schedulePreview" />
+              </div>
+            </div>
+            <div class="margin-mid">
+              <div class="field-xs">
+                <label>Lewo</label>
+                <input type="number" v-model.number="cfg.gridMargin.left" min="0" max="200" @input="schedulePreview" />
+              </div>
+              <div class="margin-center-dot"></div>
+              <div class="field-xs">
+                <label>Prawo</label>
+                <input type="number" v-model.number="cfg.gridMargin.right" min="0" max="200" @input="schedulePreview" />
+              </div>
+            </div>
+            <div class="margin-bottom">
+              <div class="field-xs">
+                <label>Dół</label>
+                <input type="number" v-model.number="cfg.gridMargin.bottom" min="0" max="200" @input="schedulePreview" />
+              </div>
+            </div>
+          </div>
+          <button class="micro-btn" style="margin-top:8px" @click="syncMargins">Wyrównaj wszystkie</button>
+        </div>
+      </section>
+
+      <!-- WYGLĄD -->
+      <section class="block">
+        <h3 class="block-title">Wygląd</h3>
+
+        <div class="color-rows">
+          <div class="color-row" v-for="c in colorFields" :key="c.key">
+            <span>{{ c.label }}</span>
+            <div class="color-ctrl">
+              <label class="swatch-btn" :style="{ background: cfg.colors[c.key] }">
+                <input type="color" v-model="cfg.colors[c.key]" @input="schedulePreview" />
+              </label>
+              <input class="hex-in" type="text" v-model="cfg.colors[c.key]"
+                @change="schedulePreview" maxlength="7" />
+            </div>
+          </div>
+        </div>
+
+        <div class="two-grid" style="margin-top:12px">
+          <div class="field-xs">
+            <label>Siatka (gr.)</label>
+            <input type="number" v-model.number="cfg.gridLineW" min="0.1" max="3" step="0.1" @input="schedulePreview" />
+          </div>
+          <div class="field-xs">
+            <label>Osie (gr.)</label>
+            <input type="number" v-model.number="cfg.axisLineW" min="0.5" max="5" step="0.1" @input="schedulePreview" />
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /sidebar-body -->
+
+    <div class="sidebar-foot">
+      <button class="foot-reset" @click="resetDefaults" title="Resetuj">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M1.5 7A5.5 5.5 0 1 0 7 1.5V0L4.5 2 7 4V2.5a4.5 4.5 0 1 1-4.5 4.5H1.5z" fill="currentColor"/>
+        </svg>
+      </button>
+      <button class="foot-gen" :class="{ loading: isGenerating }" @click="generate">
+        <span v-if="!isGenerating">Generuj PDF</span>
+        <span v-else class="gen-dots"><i></i><i></i><i></i></span>
+      </button>
+      <button class="foot-dl" :disabled="!pdfReady" @click="download">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <path d="M7.5 2v8M5 7.5l2.5 2.5 2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 12.5h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ═══ PREVIEW ════════════════════════════════════════════════ -->
+  <main class="preview">
+    <div class="preview-inner">
+      <canvas ref="canvas" class="sheet-canvas"></canvas>
+    </div>
+  </main>
+
+</div>
+<script src="pdf.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
