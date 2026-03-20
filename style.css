@@ -366,66 +366,86 @@ input[type=number] { -moz-appearance: textfield; }
 }
 .micro-btn:hover { background: var(--paper3); }
 
-/* ─── Sidebar footer — preset controls only ──────────────────── */
-.sidebar-foot {
-  display: grid;
-  grid-template-columns: 36px 1fr 1fr;
-  grid-template-rows: auto auto;
+/* ─── Przyciski akcji w panelu ───────────────────────────────── */
+.action-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.btn-generate {
+  width: 100%;
+  height: 44px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r-sm);
+  color: white;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+  letter-spacing: 0.01em;
+}
+.btn-generate:hover { background: var(--accent2); }
+.btn-generate:active { transform: scale(0.98); }
+.btn-generate.loading { opacity: 0.65; pointer-events: none; }
+
+.btn-download {
+  width: 100%;
+  height: 40px;
+  background: var(--white);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink2);
+  font-family: var(--font);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  gap: 7px;
+  transition: all 0.15s;
+}
+.btn-download:hover:not(:disabled) { border-color: var(--ink3); color: var(--ink); background: var(--paper2); }
+.btn-download:disabled { opacity: 0.35; cursor: default; }
+
+.action-row {
+  display: flex;
   gap: 6px;
-  padding: 14px 14px 18px;
-  border-top: 1px solid var(--line);
-  background: var(--paper);
+  align-items: center;
+}
+
+.btn-secondary {
+  flex: 1;
+  height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink2);
+  font-family: var(--font);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-secondary:hover:not(:disabled) { background: var(--paper2); color: var(--ink); border-color: var(--ink3); }
+.btn-secondary:disabled { opacity: 0.35; cursor: default; }
+
+.btn-ghost-sm {
+  width: 34px; height: 34px;
   flex-shrink: 0;
-  box-shadow: 0 -4px 12px rgba(42,37,32,.06);
-}
-
-/* reset — lewa kolumna, rząd 1 */
-.foot-icon {
-  width: 36px; height: 36px;
-  background: transparent; border: 1px solid var(--line);
-  border-radius: var(--r-sm); color: var(--ink3); cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink3);
+  cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: all 0.15s;
 }
-.foot-icon:hover:not(:disabled) { background: var(--paper2); color: var(--ink); border-color: var(--ink3); }
-.foot-icon:disabled { opacity: 0.3; cursor: default; }
-
-/* zapisz i wczytaj — środek i prawo, rząd 1 */
-.foot-save, .foot-load {
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  height: 36px;
-  background: transparent; border: 1px solid var(--line);
-  border-radius: var(--r-sm); color: var(--ink2);
-  font-family: var(--font); font-size: 12px; cursor: pointer;
-  transition: all 0.15s; white-space: nowrap;
-}
-.foot-save:hover { background: var(--paper2); color: var(--ink); border-color: var(--ink3); }
-.foot-load:hover:not(:disabled) { background: var(--paper2); color: var(--ink); }
-.foot-load:disabled { opacity: 0.35; cursor: default; }
-
-/* generuj — rząd 2, rozciąga się na całą szerokość minus przycisk pobierz */
-.foot-gen {
-  grid-column: 1 / 3;
-  height: 40px;
-  background: var(--accent); border: none;
-  border-radius: var(--r-sm); color: white;
-  font-family: var(--font); font-size: 13px; font-weight: 500;
-  cursor: pointer; transition: all 0.15s;
-  display: flex; align-items: center; justify-content: center;
-}
-.foot-gen:hover { background: var(--accent2); }
-.foot-gen.loading { opacity: 0.65; pointer-events: none; }
-
-/* pobierz — rząd 2, prawa kolumna */
-.foot-dl {
-  height: 40px;
-  background: transparent; border: 1px solid var(--line);
-  border-radius: var(--r-sm); color: var(--ink2); cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s;
-}
-.foot-dl:hover:not(:disabled) { background: var(--paper2); color: var(--ink); border-color: var(--ink3); }
-.foot-dl:disabled { opacity: 0.3; cursor: default; }
+.btn-ghost-sm:hover { background: var(--paper2); color: var(--ink); }
 
 .foot-icon {
   width: 36px; height: 36px; flex-shrink: 0;
