@@ -59,19 +59,32 @@ function buildLayout(cfg) {
 
 function renderToCanvas(canvas, cfg) {
   const W = cfg.pageW, H = cfg.pageH;
-  const wrap = canvas.parentElement;
-  // Use full available area — allow upscaling too, cap at 3x for perf
-  const avW  = wrap ? wrap.clientWidth  - 32 : W;
-  const avH  = wrap ? wrap.clientHeight - 32 : H;
-  const scale = Math.min(3, avW / W, avH / H);
 
-  // Use devicePixelRatio for sharp rendering on HiDPI screens
-  const dpr = window.devicePixelRatio || 1;
-  const displayW = Math.round(W * scale);
+  // Walk up to find the scrollable .preview container (not .preview-inner)
+  // so we get the true available width, not the canvas's own parent width.
+  let container = canvas.parentElement;
+  while (container && !container.classList.contains('preview')) {
+    container = container.parentElement;
+  }
+  // Fallback: use direct parent
+  if (!container) container = canvas.parentElement;
+
+  // Available width = container inner width minus padding
+  const style   = window.getComputedStyle(container);
+  const padH    = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+  const availW  = container.clientWidth - padH;
+
+  // Scale: fit width exactly, height follows aspect ratio
+  const scale = availW / W;
+  const displayW = Math.round(availW);
   const displayH = Math.round(H * scale);
 
+  // HiDPI: render at device pixel ratio for sharpness
+  const dpr = window.devicePixelRatio || 1;
   canvas.width  = displayW * dpr;
   canvas.height = displayH * dpr;
+
+  // CSS size — 100% width handled by stylesheet, explicit height needed
   canvas.style.width  = displayW + 'px';
   canvas.style.height = displayH + 'px';
 

@@ -171,8 +171,18 @@ createApp({
 
     // ── Mount ─────────────────────────────────────────────────
     onMounted(() => {
-      schedulePreview();
-      window.addEventListener('resize', schedulePreview);
+      // Wait one frame so layout is fully painted before first render
+      requestAnimationFrame(() => {
+        schedulePreview();
+      });
+
+      // Watch the preview container for size changes (resize, sidebar toggle, etc.)
+      const previewEl = document.querySelector('.preview');
+      if (previewEl && window.ResizeObserver) {
+        new ResizeObserver(() => schedulePreview()).observe(previewEl);
+      } else {
+        window.addEventListener('resize', schedulePreview);
+      }
     });
 
     return {
