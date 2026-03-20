@@ -3,93 +3,231 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Generator Notatek – Tablet</title>
+  <title>NoteGrid — Geometria Analityczna</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 </head>
-<body class="bg-black text-white font-sans h-screen overflow-hidden">
-  <div class="app-container">
-    
-    <!-- PANEL USTAWIEŃ -->
-    <section id="controls" class="controls">
-      <h1 class="text-2xl font-bold text-center mb-4">🧮 Generator Notatek</h1>
-      
-      <div class="grid grid-cols-2 gap-4 mb-4">
+<body>
+  <div id="app">
+
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div class="topbar-brand">
+        <span class="brand-mark">NG</span>
         <div>
-          <label class="label">Typ</label>
-          <select id="type" class="input">
-            <option value="grid">Siatka kartezjańska</option>
-            <option value="table">Tabela</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="label">Orientacja</label>
-          <select id="orientation" class="input">
-            <option value="portrait">Pionowa (A4)</option>
-            <option value="landscape">Pozioma (A4)</option>
-            <option value="square">Kwadrat</option>
-          </select>
-        </div>
-
-        <div id="unitContainer">
-          <label class="label">Jednostka</label>
-          <input id="unit" type="text" value="1" class="input" />
-        </div>
-
-        <div id="fractionTypeContainer">
-          <label class="label">Rodzaj zapisu</label>
-          <select id="fractionType" class="input">
-            <option value="fraction">Ułamki zwykłe</option>
-            <option value="decimal">Dziesiętne</option>
-          </select>
-        </div>
-
-        <div id="colsContainer" class="hidden">
-          <label class="label">Kolumny</label>
-          <input id="cols" type="number" value="5" class="input" />
-        </div>
-
-        <div id="rowsContainer" class="hidden">
-          <label class="label">Wiersze</label>
-          <input id="rows" type="number" value="5" class="input" />
+          <div class="brand-name">NoteGrid</div>
+          <div class="brand-sub">generator arkuszy · geometria analityczna</div>
         </div>
       </div>
-
-      <!-- Opcje główne -->
-      <div class="grid grid-cols-3 gap-2 mb-4">
-        <label class="checkbox"><input type="checkbox" id="addHeader" /> Nagłówek</label>
-        <label class="checkbox"><input type="checkbox" id="addFooter" /> Stopka</label>
-        <label class="checkbox"><input type="checkbox" id="addMargins" /> Marginesy</label>
+      <div class="topbar-actions">
+        <button class="btn-ghost" @click="resetDefaults">↺ Reset</button>
+        <button class="btn-primary" :class="{ loading: isGenerating }" @click="generate">
+          <span v-if="!isGenerating">Generuj PDF</span>
+          <span v-else class="spinner-wrap"><span class="spinner"></span></span>
+        </button>
+        <button class="btn-download" :disabled="!pdfReady" @click="download">↓ Pobierz</button>
       </div>
+    </header>
 
-      <!-- Zaawansowane -->
-      <button id="toggleAdvanced" class="btn-secondary w-full mb-3">Pokaż zaawansowane opcje</button>
+    <!-- MAIN LAYOUT -->
+    <div class="workspace">
 
-      <div id="advancedOptions" class="hidden space-y-3 mb-3">
-        <div>
-          <label class="label">Kolor siatki</label>
-          <input id="gridColor" type="color" value="#777777" class="input-color" />
+      <!-- LEFT: SETTINGS -->
+      <aside class="panel">
+        <div class="panel-scroll">
+
+          <!-- PAGE SIZE -->
+          <section class="card">
+            <div class="card-head">
+              <span class="card-icon">📐</span>
+              <span>Rozmiar arkusza</span>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Szerokość (pt)</label>
+                <input type="number" v-model.number="cfg.pageW" min="400" max="5000" step="10" @input="schedulePreview" />
+              </div>
+              <div class="field">
+                <label>Wysokość (pt)</label>
+                <input type="number" v-model.number="cfg.pageH" min="400" max="5000" step="10" @input="schedulePreview" />
+              </div>
+            </div>
+            <div class="preset-pills">
+              <button v-for="p in presets" :key="p.label"
+                class="pill" :class="{active: activePreset===p.label}"
+                @click="applyPreset(p)">{{ p.label }}</button>
+            </div>
+          </section>
+
+          <!-- LAYOUT SECTIONS -->
+          <section class="card">
+            <div class="card-head">
+              <span class="card-icon">⬛</span>
+              <span>Sekcje arkusza</span>
+            </div>
+            <p class="card-hint">Proporcje sekcji (suma powinna wynosić 100%)</p>
+
+            <div class="section-builder">
+              <div class="sb-row" v-for="sec in cfg.sections" :key="sec.id">
+                <div class="sb-meta">
+                  <label class="toggle-wrap">
+                    <input type="checkbox" v-model="sec.enabled" @change="schedulePreview" />
+                    <span class="toggle-track"></span>
+                  </label>
+                  <span class="sb-icon">{{ sec.icon }}</span>
+                  <span class="sb-name">{{ sec.name }}</span>
+                </div>
+                <div class="sb-slider-wrap" :class="{disabled: !sec.enabled}">
+                  <input type="range" v-model.number="sec.pct" min="5" max="85" step="1"
+                    :disabled="!sec.enabled" @input="schedulePreview" />
+                  <span class="sb-pct">{{ sec.enabled ? sec.pct : '—' }}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="pct-bar">
+              <div v-for="sec in cfg.sections" :key="sec.id"
+                class="pct-seg" :class="`seg-${sec.id}`"
+                :style="{width: (sec.enabled ? sec.pct : 0) + '%'}"
+                :title="sec.name + ': ' + sec.pct + '%'">
+              </div>
+            </div>
+            <div class="pct-sum" :class="{over: pctSum !== 100}">
+              Suma: <strong>{{ pctSum }}%</strong>
+              <button class="btn-micro" @click="normalizePct">Auto-wyrównaj</button>
+            </div>
+          </section>
+
+          <!-- GRID CONFIG -->
+          <section class="card">
+            <div class="card-head">
+              <span class="card-icon">#</span>
+              <span>Układ współrzędnych</span>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>X min</label>
+                <input type="number" v-model.number="cfg.xMin" @input="schedulePreview" />
+              </div>
+              <div class="field">
+                <label>X max</label>
+                <input type="number" v-model.number="cfg.xMax" @input="schedulePreview" />
+              </div>
+              <div class="field">
+                <label>Y min</label>
+                <input type="number" v-model.number="cfg.yMin" @input="schedulePreview" />
+              </div>
+              <div class="field">
+                <label>Y max</label>
+                <input type="number" v-model.number="cfg.yMax" @input="schedulePreview" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Krok siatki</label>
+                <input type="text" v-model="cfg.step" placeholder="np. 1, 0.5, 1/2" @input="schedulePreview" />
+              </div>
+              <div class="field">
+                <label>Zapis etykiet</label>
+                <select v-model="cfg.labelType" @change="schedulePreview">
+                  <option value="fraction">Ułamkowy</option>
+                  <option value="decimal">Dziesiętny</option>
+                  <option value="none">Brak</option>
+                </select>
+              </div>
+            </div>
+            <div class="toggle-row">
+              <span>Etykiety osi (x, y)</span>
+              <label class="toggle-wrap">
+                <input type="checkbox" v-model="cfg.showAxisLabels" @change="schedulePreview" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <span>Strzałki na osiach</span>
+              <label class="toggle-wrap">
+                <input type="checkbox" v-model="cfg.showArrows" @change="schedulePreview" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <span>Grube osie główne</span>
+              <label class="toggle-wrap">
+                <input type="checkbox" v-model="cfg.boldAxes" @change="schedulePreview" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+          </section>
+
+          <!-- VISUAL -->
+          <section class="card">
+            <div class="card-head">
+              <span class="card-icon">🎨</span>
+              <span>Wygląd</span>
+            </div>
+            <div class="color-grid">
+              <div class="color-row" v-for="col in colorFields" :key="col.key">
+                <label>{{ col.label }}</label>
+                <div class="color-pair">
+                  <div class="swatch"><input type="color" v-model="cfg.colors[col.key]" @input="schedulePreview" /></div>
+                  <input type="text" class="hex-input" v-model="cfg.colors[col.key]" @change="schedulePreview" maxlength="7" />
+                </div>
+              </div>
+            </div>
+            <div class="field-row" style="margin-top:12px">
+              <div class="field">
+                <label>Grubość siatki</label>
+                <input type="number" v-model.number="cfg.gridLineW" min="0.1" max="3" step="0.1" @input="schedulePreview" />
+              </div>
+              <div class="field">
+                <label>Grubość osi</label>
+                <input type="number" v-model.number="cfg.axisLineW" min="0.5" max="5" step="0.1" @input="schedulePreview" />
+              </div>
+            </div>
+          </section>
+
+          <!-- CONTENT -->
+          <section class="card">
+            <div class="card-head">
+              <span class="card-icon">✏️</span>
+              <span>Treść polecenia</span>
+            </div>
+            <textarea class="task-input" v-model="cfg.taskText" rows="4"
+              placeholder="Wpisz treść zadania, które pojawi się w górnej sekcji…"
+              @input="schedulePreview"></textarea>
+            <div class="field-row" style="margin-top:10px">
+              <div class="field">
+                <label>Czcionka polecenia</label>
+                <input type="number" v-model.number="cfg.taskFontSize" min="6" max="36" @input="schedulePreview" />
+              </div>
+              <div class="field">
+                <label>Czcionka etykiet osi</label>
+                <input type="number" v-model.number="cfg.labelFontSize" min="4" max="24" @input="schedulePreview" />
+              </div>
+            </div>
+          </section>
+
         </div>
-        <div>
-          <label class="label">Rozmiar kratki</label>
-          <input id="gridSize" type="number" value="28" class="input" />
+      </aside>
+
+      <!-- RIGHT: LIVE PREVIEW -->
+      <main class="preview-area">
+        <div class="preview-header">
+          <span class="preview-tag">Podgląd na żywo</span>
+          <span class="preview-dims">{{ cfg.pageW }} × {{ cfg.pageH }} pt</span>
         </div>
-      </div>
+        <div class="preview-wrap" ref="previewWrap">
+          <canvas ref="canvas" class="preview-canvas"></canvas>
+        </div>
+      </main>
 
-      <button id="generateBtn" class="btn-primary w-full py-3 text-lg font-bold mt-2">📄 Generuj</button>
-    </section>
-
-    <!-- PODGLĄD -->
-    <section id="preview" class="preview">
-      <div class="text-gray-400 flex items-center justify-center h-full text-center">
-        <p>Podgląd wygenerowanego PDF pojawi się tutaj</p>
-      </div>
-    </section>
-
+    </div>
   </div>
 
-  <script src="script.js"></script>
+  <script src="pdf.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
