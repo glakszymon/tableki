@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>NoteGrid</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
@@ -13,11 +13,12 @@
 <body>
 <div id="app">
 
-  <!-- ═══ SIDEBAR ════════════════════════════════════════════════ -->
-  <aside class="sidebar">
-
-    <div class="brand">
-      <svg class="brand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+  <!-- ══════════════════════════════════════════════════════════════
+       TOPBAR (mobile tylko)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="topbar">
+    <div class="topbar-brand">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
         <rect x="1.5" y="1.5" width="17" height="17" rx="3.5" stroke="currentColor" stroke-width="1.3"/>
         <line x1="10" y1="3" x2="10" y2="17" stroke="currentColor" stroke-width="1.1"/>
         <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" stroke-width="1.1"/>
@@ -26,210 +27,327 @@
         <line x1="17" y1="10" x2="14.8" y2="9" stroke="currentColor" stroke-width="1"/>
         <line x1="17" y1="10" x2="14.8" y2="11" stroke="currentColor" stroke-width="1"/>
       </svg>
-      <span>NoteGrid</span>
+      NoteGrid
     </div>
-
-    <div class="sidebar-body">
-
-      <!-- FORMAT KARTKI -->
-      <section class="block">
-        <h3 class="block-title">Format kartki</h3>
-
-        <div class="format-grid">
-          <button v-for="p in presets" :key="p.id"
-            class="fmt-card" :class="{ active: activePreset === p.id }"
-            @click="applyPreset(p)">
-            <div class="fmt-thumb-wrap">
-              <div class="fmt-thumb" :style="thumbStyle(p)"></div>
-            </div>
-            <div class="fmt-name">{{ p.label }}</div>
-            <div class="fmt-size">{{ p.w }}&thinsp;×&thinsp;{{ p.h }}</div>
-          </button>
-        </div>
-
-        <button class="rotate-btn" @click="rotateFormat">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <path d="M1.5 6.5A5 5 0 1 0 6.5 1.5V0L4 2l2.5 2V2.5a4 4 0 1 1-4 4H1.5z" fill="currentColor"/>
-          </svg>
-          Obróć format
-        </button>
-
-        <div class="custom-dims">
-          <div class="field-xs">
-            <label>Szerokość</label>
-            <input type="number" v-model.number="cfg.pageW" min="200" max="6000" @input="onCustomSize" />
-          </div>
-          <div class="dims-sep">×</div>
-          <div class="field-xs">
-            <label>Wysokość</label>
-            <input type="number" v-model.number="cfg.pageH" min="200" max="6000" @input="onCustomSize" />
-          </div>
-          <span class="dims-unit">pt</span>
-        </div>
-      </section>
-
-      <!-- SEKCJE -->
-      <section class="block">
-        <h3 class="block-title">Sekcje arkusza</h3>
-
-        <div class="sec-list">
-          <div class="sec-row" v-for="s in cfg.sections" :key="s.id">
-            <label class="sec-check">
-              <input type="checkbox" v-model="s.enabled" @change="schedulePreview" />
-              <span class="sec-box"></span>
-            </label>
-            <span class="sec-lbl" :class="{ muted: !s.enabled }">{{ s.name }}</span>
-            <div class="sec-track" :class="{ muted: !s.enabled }">
-              <div class="sec-fill" :style="{ width: (s.enabled ? s.pct : 0) + '%' }"></div>
-              <input type="range" v-model.number="s.pct" min="5" max="90" step="1"
-                :disabled="!s.enabled" @input="schedulePreview" />
-            </div>
-            <span class="sec-val" :class="{ muted: !s.enabled }">{{ s.enabled ? s.pct : 0 }}%</span>
-          </div>
-        </div>
-
-        <div class="pct-status" :class="{ bad: pctSum !== 100 }">
-          Suma {{ pctSum }}%
-          <button class="micro-btn" @click="normalizePct">auto</button>
-        </div>
-      </section>
-
-      <!-- SIATKA -->
-      <section class="block">
-        <h3 class="block-title">Układ współrzędnych</h3>
-
-        <div class="four-grid">
-          <div class="field-xs">
-            <label>X min</label>
-            <input type="number" v-model.number="cfg.xMin" @input="schedulePreview" />
-          </div>
-          <div class="field-xs">
-            <label>X max</label>
-            <input type="number" v-model.number="cfg.xMax" @input="schedulePreview" />
-          </div>
-          <div class="field-xs">
-            <label>Y min</label>
-            <input type="number" v-model.number="cfg.yMin" @input="schedulePreview" />
-          </div>
-          <div class="field-xs">
-            <label>Y max</label>
-            <input type="number" v-model.number="cfg.yMax" @input="schedulePreview" />
-          </div>
-        </div>
-
-        <div class="two-grid" style="margin-top:8px">
-          <div class="field-xs">
-            <label>Krok</label>
-            <input type="text" v-model="cfg.step" placeholder="1, 0.5, 1/2" @input="schedulePreview" />
-          </div>
-          <div class="field-xs">
-            <label>Etykiety</label>
-            <select v-model="cfg.labelType" @change="schedulePreview">
-              <option value="fraction">Ułamkowe</option>
-              <option value="decimal">Dziesiętne</option>
-              <option value="none">Brak</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="sw-list">
-          <div class="sw-row" v-for="t in axisToggles" :key="t.key">
-            <span>{{ t.label }}</span>
-            <label class="sw">
-              <input type="checkbox" v-model="cfg[t.key]" @change="schedulePreview" />
-              <span class="sw-track"></span>
-            </label>
-          </div>
-        </div>
-
-        <!-- Marginesy siatki -->
-        <div class="margin-block">
-          <div class="margin-label">Marginesy układu (pt)</div>
-          <div class="margin-cross">
-            <div class="margin-top">
-              <div class="field-xs">
-                <label>Góra</label>
-                <input type="number" v-model.number="cfg.gridMargin.top" min="0" max="200" @input="schedulePreview" />
-              </div>
-            </div>
-            <div class="margin-mid">
-              <div class="field-xs">
-                <label>Lewo</label>
-                <input type="number" v-model.number="cfg.gridMargin.left" min="0" max="200" @input="schedulePreview" />
-              </div>
-              <div class="margin-center-dot"></div>
-              <div class="field-xs">
-                <label>Prawo</label>
-                <input type="number" v-model.number="cfg.gridMargin.right" min="0" max="200" @input="schedulePreview" />
-              </div>
-            </div>
-            <div class="margin-bottom">
-              <div class="field-xs">
-                <label>Dół</label>
-                <input type="number" v-model.number="cfg.gridMargin.bottom" min="0" max="200" @input="schedulePreview" />
-              </div>
-            </div>
-          </div>
-          <button class="micro-btn" style="margin-top:8px" @click="syncMargins">Wyrównaj wszystkie</button>
-        </div>
-      </section>
-
-      <!-- WYGLĄD -->
-      <section class="block">
-        <h3 class="block-title">Wygląd</h3>
-
-        <div class="color-rows">
-          <div class="color-row" v-for="c in colorFields" :key="c.key">
-            <span>{{ c.label }}</span>
-            <div class="color-ctrl">
-              <label class="swatch-btn" :style="{ background: cfg.colors[c.key] }">
-                <input type="color" v-model="cfg.colors[c.key]" @input="schedulePreview" />
-              </label>
-              <input class="hex-in" type="text" v-model="cfg.colors[c.key]"
-                @change="schedulePreview" maxlength="7" />
-            </div>
-          </div>
-        </div>
-
-        <div class="two-grid" style="margin-top:12px">
-          <div class="field-xs">
-            <label>Siatka (gr.)</label>
-            <input type="number" v-model.number="cfg.gridLineW" min="0.1" max="3" step="0.1" @input="schedulePreview" />
-          </div>
-          <div class="field-xs">
-            <label>Osie (gr.)</label>
-            <input type="number" v-model.number="cfg.axisLineW" min="0.5" max="5" step="0.1" @input="schedulePreview" />
-          </div>
-        </div>
-      </section>
-
-    </div><!-- /sidebar-body -->
-
-    <div class="sidebar-foot">
-      <button class="foot-reset" @click="resetDefaults" title="Resetuj">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M1.5 7A5.5 5.5 0 1 0 7 1.5V0L4.5 2 7 4V2.5a4.5 4.5 0 1 1-4.5 4.5H1.5z" fill="currentColor"/>
-        </svg>
-      </button>
-      <button class="foot-gen" :class="{ loading: isGenerating }" @click="generate">
-        <span v-if="!isGenerating">Generuj PDF</span>
+    <div class="topbar-right">
+      <button class="topbar-gen" @click="generate" :class="{ loading: isGenerating }">
+        <span v-if="!isGenerating">PDF</span>
         <span v-else class="gen-dots"><i></i><i></i><i></i></span>
       </button>
-      <button class="foot-dl" :disabled="!pdfReady" @click="download">
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <button class="topbar-dl" :disabled="!pdfReady" @click="download">
+        <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
           <path d="M7.5 2v8M5 7.5l2.5 2.5 2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M2 12.5h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
         </svg>
       </button>
+      <button class="hamburger" @click="toggleSidebar" :class="{ open: sidebarOpen }">
+        <span></span><span></span><span></span>
+      </button>
     </div>
-  </aside>
+  </div>
 
-  <!-- ═══ PREVIEW ════════════════════════════════════════════════ -->
-  <main class="preview">
-    <div class="preview-inner">
-      <canvas ref="canvas" class="sheet-canvas"></canvas>
+  <!-- ══════════════════════════════════════════════════════════════
+       MAIN LAYOUT
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="layout">
+
+    <!-- Overlay do zamykania sidebara na mobile -->
+    <div class="sidebar-overlay" :class="{ visible: sidebarOpen }" @click="toggleSidebar"></div>
+
+    <!-- ════════════════ SIDEBAR ════════════════ -->
+    <aside class="sidebar" :class="{ open: sidebarOpen }">
+
+      <!-- Brand (desktop) -->
+      <div class="sidebar-brand">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+          <rect x="1.5" y="1.5" width="17" height="17" rx="3.5" stroke="currentColor" stroke-width="1.3"/>
+          <line x1="10" y1="3" x2="10" y2="17" stroke="currentColor" stroke-width="1.1"/>
+          <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" stroke-width="1.1"/>
+          <line x1="10" y1="3" x2="9" y2="5.2" stroke="currentColor" stroke-width="1"/>
+          <line x1="10" y1="3" x2="11" y2="5.2" stroke="currentColor" stroke-width="1"/>
+          <line x1="17" y1="10" x2="14.8" y2="9" stroke="currentColor" stroke-width="1"/>
+          <line x1="17" y1="10" x2="14.8" y2="11" stroke="currentColor" stroke-width="1"/>
+        </svg>
+        <span>NoteGrid</span>
+      </div>
+
+      <div class="sidebar-body">
+
+        <!-- FORMAT KARTKI -->
+        <section class="block">
+          <h3 class="block-title">Format kartki</h3>
+          <div class="format-grid">
+            <button v-for="p in pagePresets" :key="p.id"
+              class="fmt-card" :class="{ active: activePagePre === p.id }"
+              @click="applyPagePreset(p)">
+              <div class="fmt-thumb-wrap">
+                <div class="fmt-thumb" :style="thumbStyle(p)"></div>
+              </div>
+              <div class="fmt-name">{{ p.label }}</div>
+              <div class="fmt-size">{{ p.w }}×{{ p.h }}</div>
+            </button>
+          </div>
+
+          <button class="rotate-btn" @click="rotateFormat">
+            <svg width="12" height="12" viewBox="0 0 13 13" fill="none">
+              <path d="M1.5 6.5A5 5 0 1 0 6.5 1.5V0L4 2l2.5 2V2.5a4 4 0 1 1-4 4H1.5z" fill="currentColor"/>
+            </svg>
+            Obróć format
+          </button>
+
+          <div class="custom-dims">
+            <div class="field-xs">
+              <label>Szerokość</label>
+              <input type="number" v-model.number="cfg.pageW" min="200" max="6000" @input="onCustomSize" />
+            </div>
+            <div class="dims-sep">×</div>
+            <div class="field-xs">
+              <label>Wysokość</label>
+              <input type="number" v-model.number="cfg.pageH" min="200" max="6000" @input="onCustomSize" />
+            </div>
+            <span class="dims-unit">pt</span>
+          </div>
+        </section>
+
+        <!-- SEKCJE -->
+        <section class="block">
+          <h3 class="block-title">Sekcje arkusza</h3>
+          <div class="sec-list">
+            <div class="sec-row" v-for="s in cfg.sections" :key="s.id">
+              <label class="sec-check">
+                <input type="checkbox" v-model="s.enabled" @change="schedulePreview" />
+                <span class="sec-box"></span>
+              </label>
+              <span class="sec-lbl" :class="{ muted: !s.enabled }">{{ s.name }}</span>
+              <div class="sec-track" :class="{ muted: !s.enabled }">
+                <div class="sec-fill" :style="{ width: (s.enabled ? s.pct : 0) + '%' }"></div>
+                <input type="range" v-model.number="s.pct" min="5" max="90" step="1"
+                  :disabled="!s.enabled" @input="schedulePreview" />
+              </div>
+              <span class="sec-val" :class="{ muted: !s.enabled }">{{ s.enabled ? s.pct : 0 }}%</span>
+            </div>
+          </div>
+          <div class="pct-status" :class="{ bad: pctSum !== 100 }">
+            Suma {{ pctSum }}%
+            <button class="micro-btn" @click="normalizePct">auto</button>
+          </div>
+        </section>
+
+        <!-- UKŁAD WSPÓŁRZĘDNYCH -->
+        <section class="block">
+          <h3 class="block-title">Układ współrzędnych</h3>
+          <div class="four-grid">
+            <div class="field-xs">
+              <label>X min</label>
+              <input type="number" v-model.number="cfg.xMin" @input="schedulePreview" />
+            </div>
+            <div class="field-xs">
+              <label>X max</label>
+              <input type="number" v-model.number="cfg.xMax" @input="schedulePreview" />
+            </div>
+            <div class="field-xs">
+              <label>Y min</label>
+              <input type="number" v-model.number="cfg.yMin" @input="schedulePreview" />
+            </div>
+            <div class="field-xs">
+              <label>Y max</label>
+              <input type="number" v-model.number="cfg.yMax" @input="schedulePreview" />
+            </div>
+          </div>
+          <div class="two-grid" style="margin-top:8px">
+            <div class="field-xs">
+              <label>Krok</label>
+              <input type="text" v-model="cfg.step" placeholder="1, 0.5, 1/2" @input="schedulePreview" />
+            </div>
+            <div class="field-xs">
+              <label>Etykiety</label>
+              <select v-model="cfg.labelType" @change="schedulePreview">
+                <option value="fraction">Ułamkowe</option>
+                <option value="decimal">Dziesiętne</option>
+                <option value="none">Brak</option>
+              </select>
+            </div>
+          </div>
+          <div class="sw-list">
+            <div class="sw-row" v-for="t in axisToggles" :key="t.key">
+              <span>{{ t.label }}</span>
+              <label class="sw">
+                <input type="checkbox" v-model="cfg[t.key]" @change="schedulePreview" />
+                <span class="sw-track"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Marginesy -->
+          <div class="margin-block">
+            <div class="margin-label">Marginesy układu (pt)</div>
+            <div class="margin-cross">
+              <div class="margin-top-row">
+                <div class="field-xs narrow">
+                  <label>Góra</label>
+                  <input type="number" v-model.number="cfg.gridMargin.top" min="0" max="200" @input="schedulePreview" />
+                </div>
+              </div>
+              <div class="margin-mid-row">
+                <div class="field-xs narrow">
+                  <label>Lewo</label>
+                  <input type="number" v-model.number="cfg.gridMargin.left" min="0" max="200" @input="schedulePreview" />
+                </div>
+                <div class="margin-dot"></div>
+                <div class="field-xs narrow">
+                  <label>Prawo</label>
+                  <input type="number" v-model.number="cfg.gridMargin.right" min="0" max="200" @input="schedulePreview" />
+                </div>
+              </div>
+              <div class="margin-bot-row">
+                <div class="field-xs narrow">
+                  <label>Dół</label>
+                  <input type="number" v-model.number="cfg.gridMargin.bottom" min="0" max="200" @input="schedulePreview" />
+                </div>
+              </div>
+            </div>
+            <button class="micro-btn" @click="syncMargins">Wyrównaj wszystkie</button>
+          </div>
+        </section>
+
+        <!-- WYGLĄD -->
+        <section class="block">
+          <h3 class="block-title">Wygląd</h3>
+          <div class="color-rows">
+            <div class="color-row" v-for="c in colorFields" :key="c.key">
+              <span>{{ c.label }}</span>
+              <div class="color-ctrl">
+                <label class="swatch-btn" :style="{ background: cfg.colors[c.key] }">
+                  <input type="color" v-model="cfg.colors[c.key]" @input="schedulePreview" />
+                </label>
+                <input class="hex-in" type="text" v-model="cfg.colors[c.key]"
+                  @change="schedulePreview" maxlength="7" />
+              </div>
+            </div>
+          </div>
+          <div class="two-grid" style="margin-top:12px">
+            <div class="field-xs">
+              <label>Siatka (gr.)</label>
+              <input type="number" v-model.number="cfg.gridLineW" min="0.1" max="3" step="0.1" @input="schedulePreview" />
+            </div>
+            <div class="field-xs">
+              <label>Osie (gr.)</label>
+              <input type="number" v-model.number="cfg.axisLineW" min="0.5" max="5" step="0.1" @input="schedulePreview" />
+            </div>
+          </div>
+        </section>
+
+      </div><!-- /sidebar-body -->
+
+      <!-- Footer sidebara -->
+      <div class="sidebar-foot">
+        <button class="foot-icon" @click="resetDefaults" title="Przywróć domyślne">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M1.5 7A5.5 5.5 0 1 0 7 1.5V0L4.5 2 7 4V2.5a4.5 4.5 0 1 1-4.5 4.5H1.5z" fill="currentColor"/>
+          </svg>
+        </button>
+        <button class="foot-save" @click="openSaveModal">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+            <path d="M2 2h8l2 2v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2z" stroke="currentColor" stroke-width="1.2"/>
+            <rect x="4.5" y="2" width="4" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2"/>
+            <rect x="3.5" y="7.5" width="7" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.2"/>
+          </svg>
+          Zapisz preset
+        </button>
+        <button class="foot-load" @click="openLoadModal" :disabled="savedPresets.length === 0">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+            <path d="M1.5 4.5V12a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V5.5L10.5 3H3a1.5 1.5 0 0 0-1.5 1.5z" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M7 6v5M5 9l2 2 2-2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Wczytaj
+          <span v-if="savedPresets.length" class="preset-count">{{ savedPresets.length }}</span>
+        </button>
+        <button class="foot-gen" :class="{ loading: isGenerating }" @click="generate">
+          <span v-if="!isGenerating">Generuj PDF</span>
+          <span v-else class="gen-dots"><i></i><i></i><i></i></span>
+        </button>
+        <button class="foot-icon" :disabled="!pdfReady" @click="download">
+          <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+            <path d="M7.5 2v8M5 7.5l2.5 2.5 2.5-2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12.5h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+    </aside><!-- /sidebar -->
+
+    <!-- ════════════════ PREVIEW ════════════════ -->
+    <main class="preview">
+      <div class="preview-inner">
+        <canvas ref="canvas" class="sheet-canvas"></canvas>
+      </div>
+    </main>
+
+  </div><!-- /layout -->
+
+  <!-- ══════════════════════════════════════════════════════════════
+       MODAL: ZAPISZ PRESET
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" v-if="showSaveModal" @click.self="showSaveModal = false">
+    <div class="modal">
+      <div class="modal-head">
+        <span>Zapisz ustawienia jako preset</span>
+        <button class="modal-close" @click="showSaveModal = false">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field-xs">
+          <label>Nazwa presetu</label>
+          <input id="presetNameInput" type="text" v-model="newPresetName"
+            placeholder="np. Geometria kl. 3A"
+            @input="onPresetNameInput"
+            @keydown.enter="confirmSave"
+            maxlength="40" />
+        </div>
+        <div class="overwrite-warn" v-if="overwriteMode">
+          ⚠ Preset o tej nazwie już istnieje — zostanie nadpisany.
+        </div>
+        <div class="save-error" v-if="saveError">{{ saveError }}</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-modal-cancel" @click="showSaveModal = false">Anuluj</button>
+        <button class="btn-modal-ok" @click="confirmSave">
+          {{ overwriteMode ? 'Nadpisz' : 'Zapisz' }}
+        </button>
+      </div>
     </div>
-  </main>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       MODAL: WCZYTAJ PRESET
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" v-if="showLoadModal" @click.self="showLoadModal = false">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <span>Wczytaj preset</span>
+        <button class="modal-close" @click="showLoadModal = false">✕</button>
+      </div>
+      <div class="modal-body">
+        <div v-if="savedPresets.length === 0" class="empty-presets">
+          Brak zapisanych presetów.
+        </div>
+        <div class="preset-list" v-else>
+          <div class="preset-item" v-for="p in savedPresets" :key="p.id">
+            <div class="preset-info">
+              <div class="preset-name">{{ p.name }}</div>
+              <div class="preset-meta">{{ p.cfg.pageW }}×{{ p.cfg.pageH }} pt · {{ p.date }}</div>
+            </div>
+            <div class="preset-actions">
+              <button class="btn-load-preset" @click="loadPreset(p)">Wczytaj</button>
+              <button class="btn-del-preset" @click="deletePreset(p.id)" title="Usuń">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-modal-cancel" @click="showLoadModal = false">Zamknij</button>
+      </div>
+    </div>
+  </div>
 
 </div>
 <script src="pdf.js"></script>

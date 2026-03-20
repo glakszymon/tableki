@@ -1,31 +1,31 @@
 /**
  * app.js — NoteGrid Vue 3
+ * Funkcje: podgląd na żywo, generowanie PDF, zapis/wczytywanie presetów użytkownika
  */
 
 const { createApp, ref, reactive, computed, onMounted, nextTick } = Vue;
 
-// ── Presets ───────────────────────────────────────────────────────────────────
-// Dimensions in pt (1 pt = 1/72 inch; A4 = 595×842 pt)
-const PRESETS = [
-  { id: 'a4p',      label: 'A4',          w: 595,  h: 842  },
-  { id: 'a4l',      label: 'A4 poziom',   w: 842,  h: 595  },
-  { id: 'a4x2',     label: 'A4×2',        w: 595,  h: 1684 },
-  { id: 'ipad11',   label: 'iPad 11"',    w: 768,  h: 1024 },
-  { id: 'ipad13',   label: 'iPad 13"',    w: 1024, h: 1366 },
-  { id: 'ipadpro',  label: 'iPad Pro',    w: 834,  h: 1194 },
+const LS_KEY = 'notegrid_user_presets';
+
+// ── Wymiary kartek (pt) ───────────────────────────────────────────────────────
+const PAGE_PRESETS = [
+  { id: 'a4p',     label: 'A4',        w: 595,  h: 842  },
+  { id: 'a4l',     label: 'A4 poziom', w: 842,  h: 595  },
+  { id: 'a4x2',    label: 'A4×2',      w: 595,  h: 1684 },
+  { id: 'ipad11',  label: 'iPad 11"',  w: 768,  h: 1024 },
+  { id: 'ipad13',  label: 'iPad 13"',  w: 1024, h: 1366 },
+  { id: 'ipadpro', label: 'iPad Pro',  w: 834,  h: 1194 },
 ];
 
-// ── Default config ────────────────────────────────────────────────────────────
+// ── Domyślna konfiguracja ─────────────────────────────────────────────────────
 const DEFAULT_CFG = () => ({
   pageW: 595,
-  pageH: 1684,   // A4×2 default
-
+  pageH: 1684,
   sections: [
-    { id: 'task', name: 'Polecenie',  pct: 18, enabled: true  },
-    { id: 'grid', name: 'Siatka',    pct: 52, enabled: true  },
-    { id: 'work', name: 'Obliczenia', pct: 30, enabled: true  },
+    { id: 'task', name: 'Polecenie',  pct: 18, enabled: true },
+    { id: 'grid', name: 'Siatka',    pct: 52, enabled: true },
+    { id: 'work', name: 'Obliczenia', pct: 30, enabled: true },
   ],
-
   xMin: -10, xMax: 10,
   yMin: -10, yMax: 10,
   step: '1',
@@ -33,77 +33,97 @@ const DEFAULT_CFG = () => ({
   showAxisLabels: true,
   showArrows: true,
   boldAxes: true,
-
   colors: {
-    taskBg:   '#faf8f5',
-    taskText: '#2a2520',
-    gridBg:   '#ffffff',
-    grid:     '#d0c8bf',
-    axes:     '#2a2520',
-    workBg:   '#fdfcfa',
+    taskBg:  '#faf8f5',
+    taskText:'#2a2520',
+    gridBg:  '#ffffff',
+    grid:    '#d0c8bf',
+    axes:    '#2a2520',
+    workBg:  '#fdfcfa',
   },
-
   gridLineW:    0.5,
   axisLineW:    1.4,
   labelFontSize: 9,
-
   gridMargin: { top: 32, right: 32, bottom: 32, left: 32 },
 });
 
-// ── App ───────────────────────────────────────────────────────────────────────
+function cloneCfg(c) {
+  return {
+    ...c,
+    sections:   c.sections.map(s => ({ ...s })),
+    colors:     { ...c.colors },
+    gridMargin: { ...c.gridMargin },
+  };
+}
+
+function loadSavedPresets() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+}
+
+function persistPresets(list) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch {}
+}
+
+// ── Vue App ───────────────────────────────────────────────────────────────────
 createApp({
   setup() {
-    const cfg          = reactive(DEFAULT_CFG());
-    const canvas       = ref(null);
-    const isGenerating = ref(false);
-    const pdfReady     = ref(false);
-    const activePreset = ref('a4x2');
-    let   pdfBlob      = null;
-    let   pdfName      = 'notegrid.pdf';
-    let   previewTimer = null;
+    const cfg           = reactive(DEFAULT_CFG());
+    const canvas        = ref(null);
+    const isGenerating  = ref(false);
+    const pdfReady      = ref(false);
+    const activePagePre = ref('a4x2');
+    const sidebarOpen   = ref(true);
+    let   pdfBlob       = null;
+    let   pdfName       = 'notegrid.pdf';
+    let   previewTimer  = null;
 
-    // ── Computed ──────────────────────────────────────────────
+    // Presety użytkownika
+    const savedPresets  = ref(loadSavedPresets());
+
+    // Modal zapisu
+    const showSaveModal = ref(false);
+    const newPresetName = ref('');
+    const saveError     = ref('');
+    const overwriteMode = ref(false);
+
+    // Modal wczytywania
+    const showLoadModal = ref(false);
+
+    // ── Obliczenia ─────────────────────────────────────────────
     const pctSum = computed(() =>
       cfg.sections.filter(s => s.enabled).reduce((a, s) => a + s.pct, 0)
     );
 
-    // ── Preset thumbnails ─────────────────────────────────────
+    // ── Miniatury formatów ─────────────────────────────────────
     function thumbStyle(p) {
-      const BOX = 32;
-      const ratio = p.w / p.h;
-      let tw, th;
-      if (ratio >= 1) { tw = BOX; th = Math.round(BOX / ratio); }
-      else            { th = BOX; tw = Math.round(BOX * ratio); }
-      return { width: tw + 'px', height: th + 'px' };
+      const BOX = 28;
+      const r = p.w / p.h;
+      return r >= 1
+        ? { width: BOX + 'px', height: Math.round(BOX / r) + 'px' }
+        : { width: Math.round(BOX * r) + 'px', height: BOX + 'px' };
     }
 
-    // ── Preset apply ──────────────────────────────────────────
-    function applyPreset(p) {
-      cfg.pageW = p.w;
-      cfg.pageH = p.h;
-      activePreset.value = p.id;
+    // ── Format kartki ──────────────────────────────────────────
+    function applyPagePreset(p) {
+      cfg.pageW = p.w; cfg.pageH = p.h;
+      activePagePre.value = p.id;
       schedulePreview();
     }
 
-    // ── Rotate ────────────────────────────────────────────────
     function rotateFormat() {
-      const tmp = cfg.pageW;
-      cfg.pageW = cfg.pageH;
-      cfg.pageH = tmp;
-      // Update active preset if it matches swapped dims
-      const match = PRESETS.find(p => p.w === cfg.pageW && p.h === cfg.pageH);
-      activePreset.value = match ? match.id : null;
+      [cfg.pageW, cfg.pageH] = [cfg.pageH, cfg.pageW];
+      const m = PAGE_PRESETS.find(p => p.w === cfg.pageW && p.h === cfg.pageH);
+      activePagePre.value = m ? m.id : null;
       schedulePreview();
     }
 
-    // ── Custom size input ─────────────────────────────────────
     function onCustomSize() {
-      const match = PRESETS.find(p => p.w === cfg.pageW && p.h === cfg.pageH);
-      activePreset.value = match ? match.id : null;
+      const m = PAGE_PRESETS.find(p => p.w === cfg.pageW && p.h === cfg.pageH);
+      activePagePre.value = m ? m.id : null;
       schedulePreview();
     }
 
-    // ── Sections ──────────────────────────────────────────────
+    // ── Sekcje ─────────────────────────────────────────────────
     function normalizePct() {
       const active = cfg.sections.filter(s => s.enabled);
       if (!active.length) return;
@@ -113,25 +133,26 @@ createApp({
       schedulePreview();
     }
 
-    // ── Sync margins ──────────────────────────────────────────
+    // ── Marginesy ──────────────────────────────────────────────
     function syncMargins() {
-      const avg = Math.round((cfg.gridMargin.top + cfg.gridMargin.right + cfg.gridMargin.bottom + cfg.gridMargin.left) / 4);
-      cfg.gridMargin.top = cfg.gridMargin.right = cfg.gridMargin.bottom = cfg.gridMargin.left = avg;
+      const avg = Math.round(
+        (cfg.gridMargin.top + cfg.gridMargin.right +
+         cfg.gridMargin.bottom + cfg.gridMargin.left) / 4
+      );
+      cfg.gridMargin.top = cfg.gridMargin.right =
+      cfg.gridMargin.bottom = cfg.gridMargin.left = avg;
       schedulePreview();
     }
 
-    // ── Preview ───────────────────────────────────────────────
+    // ── Podgląd ────────────────────────────────────────────────
     function schedulePreview() {
       clearTimeout(previewTimer);
-      previewTimer = setTimeout(drawPreview, 60);
+      previewTimer = setTimeout(() => {
+        if (canvas.value) window.NoteGridPDF.renderToCanvas(canvas.value, cfg);
+      }, 60);
     }
 
-    function drawPreview() {
-      if (!canvas.value) return;
-      window.NoteGridPDF.renderToCanvas(canvas.value, cfg);
-    }
-
-    // ── Generate PDF ──────────────────────────────────────────
+    // ── Generowanie PDF ────────────────────────────────────────
     async function generate() {
       isGenerating.value = true;
       await nextTick();
@@ -141,14 +162,11 @@ createApp({
           pdfBlob = doc.output('blob');
           pdfName = `notegrid_${cfg.pageW}x${cfg.pageH}.pdf`;
           pdfReady.value = true;
-        } catch (err) {
-          console.error('PDF error:', err);
-        }
+        } catch (e) { console.error(e); }
         isGenerating.value = false;
       }, 60);
     }
 
-    // ── Download ──────────────────────────────────────────────
     function download() {
       if (!pdfBlob) return;
       const a = document.createElement('a');
@@ -157,26 +175,80 @@ createApp({
       a.click();
     }
 
-    // ── Reset ─────────────────────────────────────────────────
+    // ── Reset ──────────────────────────────────────────────────
     function resetDefaults() {
       const d = DEFAULT_CFG();
-      Object.assign(cfg, d);
-      cfg.sections = d.sections.map(s => ({ ...s }));
-      cfg.colors   = { ...d.colors };
-      cfg.gridMargin = { ...d.gridMargin };
-      activePreset.value = 'a4x2';
+      Object.assign(cfg, cloneCfg(d));
+      activePagePre.value = 'a4x2';
       pdfReady.value = false;
       schedulePreview();
     }
 
-    // ── Mount ─────────────────────────────────────────────────
-    onMounted(() => {
-      // Wait one frame so layout is fully painted before first render
-      requestAnimationFrame(() => {
-        schedulePreview();
-      });
+    // ── Zapis presetu ──────────────────────────────────────────
+    function openSaveModal() {
+      newPresetName.value = '';
+      saveError.value = '';
+      overwriteMode.value = false;
+      showSaveModal.value = true;
+      nextTick(() => document.getElementById('presetNameInput')?.focus());
+    }
 
-      // Watch the preview container for size changes (resize, sidebar toggle, etc.)
+    function onPresetNameInput() {
+      const name = newPresetName.value.trim();
+      overwriteMode.value = savedPresets.value.some(p => p.name === name);
+      saveError.value = '';
+    }
+
+    function confirmSave() {
+      const name = newPresetName.value.trim();
+      if (!name) { saveError.value = 'Wpisz nazwę presetu.'; return; }
+      if (name.length > 40) { saveError.value = 'Maks. 40 znaków.'; return; }
+
+      const existing = savedPresets.value.findIndex(p => p.name === name);
+      const entry = {
+        id:   existing >= 0 ? savedPresets.value[existing].id : Date.now().toString(),
+        name,
+        cfg:  cloneCfg(cfg),
+        date: new Date().toLocaleDateString('pl-PL'),
+      };
+
+      if (existing >= 0) savedPresets.value.splice(existing, 1, entry);
+      else savedPresets.value.unshift(entry);
+
+      persistPresets(savedPresets.value);
+      showSaveModal.value = false;
+    }
+
+    // ── Wczytywanie presetu ────────────────────────────────────
+    function openLoadModal() {
+      showLoadModal.value = true;
+    }
+
+    function loadPreset(preset) {
+      Object.assign(cfg, cloneCfg(preset.cfg));
+      const m = PAGE_PRESETS.find(p => p.w === cfg.pageW && p.h === cfg.pageH);
+      activePagePre.value = m ? m.id : null;
+      pdfReady.value = false;
+      showLoadModal.value = false;
+      schedulePreview();
+    }
+
+    function deletePreset(id) {
+      savedPresets.value = savedPresets.value.filter(p => p.id !== id);
+      persistPresets(savedPresets.value);
+    }
+
+    // ── Sidebar toggle (mobile) ────────────────────────────────
+    function toggleSidebar() {
+      sidebarOpen.value = !sidebarOpen.value;
+      setTimeout(schedulePreview, 320);
+    }
+
+    // ── Mount ──────────────────────────────────────────────────
+    onMounted(() => {
+      if (window.innerWidth < 700) sidebarOpen.value = false;
+      requestAnimationFrame(() => schedulePreview());
+
       const previewEl = document.querySelector('.preview');
       if (previewEl && window.ResizeObserver) {
         new ResizeObserver(() => schedulePreview()).observe(previewEl);
@@ -188,15 +260,18 @@ createApp({
     return {
       cfg, canvas,
       isGenerating, pdfReady,
-      presets: PRESETS,
-      activePreset,
+      pagePresets: PAGE_PRESETS,
+      activePagePre, sidebarOpen,
       pctSum,
+      savedPresets,
+      showSaveModal, newPresetName, saveError, overwriteMode,
+      showLoadModal,
       colorFields: [
-        { key: 'taskBg',   label: 'Tło polecenia'  },
-        { key: 'gridBg',   label: 'Tło siatki'     },
-        { key: 'grid',     label: 'Linie siatki'   },
-        { key: 'axes',     label: 'Osie + etykiety' },
-        { key: 'workBg',   label: 'Tło obliczeń'   },
+        { key: 'taskBg',  label: 'Tło polecenia'  },
+        { key: 'gridBg',  label: 'Tło siatki'     },
+        { key: 'grid',    label: 'Linie siatki'   },
+        { key: 'axes',    label: 'Osie + etykiety' },
+        { key: 'workBg',  label: 'Tło obliczeń'   },
       ],
       axisToggles: [
         { key: 'showAxisLabels', label: 'Etykiety osi (x, y)' },
@@ -204,9 +279,12 @@ createApp({
         { key: 'boldAxes',       label: 'Grube osie główne'   },
       ],
       thumbStyle,
-      applyPreset, rotateFormat, onCustomSize,
-      normalizePct, schedulePreview, syncMargins,
+      applyPagePreset, rotateFormat, onCustomSize,
+      normalizePct, syncMargins, schedulePreview,
       generate, download, resetDefaults,
+      openSaveModal, confirmSave, onPresetNameInput,
+      openLoadModal, loadPreset, deletePreset,
+      toggleSidebar,
     };
   }
 }).mount('#app');
